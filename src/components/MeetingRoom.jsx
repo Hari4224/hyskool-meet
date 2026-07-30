@@ -8,7 +8,7 @@ import SIPDialerModal from './SIPDialerModal';
 import SharedNotes from './SharedNotes';
 import IntegrationModal from './IntegrationModal';
 
-import { Shield, Lock, Users, Radio, Sparkles, Volume2, AlertTriangle } from 'lucide-react';
+import { Shield, Lock, Users, Radio, Sparkles, Volume2 } from 'lucide-react';
 
 // Enterprise-Grade ICE Servers (STUN & TURN Relays for NAT/Firewall Traversal)
 const ICE_SERVERS = {
@@ -69,7 +69,7 @@ export default function MeetingRoom({
   // ICE Candidate Queues: Map<socketId, RTCIceCandidate[]>
   const iceCandidatesQueue = useRef(new Map());
 
-  // 1. Initialize Local HD Media Stream (Mic & Camera)
+  // 1. Initialize Local HD Media Stream (Mic & Camera) BEFORE signaling
   useEffect(() => {
     let currentStream = null;
 
@@ -121,7 +121,17 @@ export default function MeetingRoom({
 
     initMedia();
 
+    // Global click listener to unlock Web Audio Autoplay Policy on modern browsers
+    const handleGlobalClick = () => {
+      setAudioBlocked(false);
+      document.querySelectorAll('audio, video').forEach(media => {
+        media.play().catch(() => {});
+      });
+    };
+    window.addEventListener('click', handleGlobalClick);
+
     return () => {
+      window.removeEventListener('click', handleGlobalClick);
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
       }
@@ -139,7 +149,7 @@ export default function MeetingRoom({
       userRole: roomData.userRole
     });
 
-    // Helper: Create RTCPeerConnection for a target peer
+    // Helper: Create RTCPeerConnection for a target peer with guaranteed Audio Transceivers
     const createPeerConnection = (targetId, isInitiator) => {
       if (peerConnections.current.has(targetId)) {
         return peerConnections.current.get(targetId);
@@ -149,10 +159,24 @@ export default function MeetingRoom({
       const pc = new RTCPeerConnection(ICE_SERVERS);
       peerConnections.current.set(targetId, pc);
 
-      // Add local media tracks to PeerConnection
+      // GUARANTEE Bidirectional Audio & Video Transceivers in SDP
+      try {
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
+        pc.addTransceiver('video', { direction: 'sendrecv' });
+      } catch (e) {
+        console.warn('Transceiver addition notice:', e);
+      }
+
+      // Add local media tracks to PeerConnection if available
       if (localStream) {
         localStream.getTracks().forEach((track) => {
-          pc.addTrack(track, localStream);
+          const senders = pc.getSenders();
+          const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+          if (existingSender) {
+            existingSender.replaceTrack(track);
+          } else {
+            pc.addTrack(track, localStream);
+          }
         });
       }
 
@@ -176,7 +200,7 @@ export default function MeetingRoom({
 
       // Handle Remote Audio/Video Tracks
       pc.ontrack = (event) => {
-        console.log(`[WebRTC Track Received] From ${targetId}:`, event.streams[0]);
+        console.log(`[WebRTC Track Received] Kind: ${event.track.kind} From ${targetId}:`, event.streams[0]);
         const remoteStream = event.streams[0] || new MediaStream([event.track]);
         
         setRemoteStreams(prev => {
@@ -191,7 +215,7 @@ export default function MeetingRoom({
         audioTest.play().catch(() => setAudioBlocked(true));
       };
 
-      // If Initiator: Create Offer
+      // If Initiator: Create Offer with forced audio/video SDP
       if (isInitiator) {
         pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
           .then((offer) => pc.setLocalDescription(offer))
@@ -462,7 +486,7 @@ export default function MeetingRoom({
         <div 
           onClick={handleUnlockAudio}
           style={{
-            background: 'linear-gradient(90deg, #ea4335, #fbbc04)',
+            background: 'linear-gradient(90deg, #ef4444, #f59e0b)',
             color: 'white',
             padding: '8px 16px',
             fontSize: '0.85rem',
@@ -476,14 +500,14 @@ export default function MeetingRoom({
             zIndex: 100
           }}
         >
-          <Volume2 size={16} /> Click here to enable remote participant audio playback in your browser!
+          <Volume2 size={16} /> Click anywhere to unmute & enable remote voice audio in your browser!
         </div>
       )}
 
       {/* Top Header Status Bar */}
       <header className="meeting-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#38bdf8' }}>HYSKOOL MEET</span>
+          <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0284c7' }}>HYSKOOL MEET</span>
           <span className="badge badge-purple">Room: {roomData.roomId}</span>
           {isE2EE && <span className="badge badge-cyan"><Shield size={12} /> E2EE Active</span>}
           {isLocked && <span className="badge badge-amber"><Lock size={12} /> Room Locked</span>}
@@ -491,16 +515,16 @@ export default function MeetingRoom({
 
         {/* Video High Definition Quality Control */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.06)', padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <Sparkles size={14} color="#38bdf8" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f1f5f9', padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)' }}>
+            <Sparkles size={14} color="#0284c7" />
             <select 
               value={videoQuality}
               onChange={(e) => setVideoQuality(e.target.value)}
               style={{ background: 'transparent', color: 'var(--text-main)', border: 'none', fontSize: '0.8rem', fontWeight: 600, outline: 'none', cursor: 'pointer' }}
             >
-              <option value="1080p" style={{ background: '#1e1f20' }}>1080p Full HD</option>
-              <option value="720p" style={{ background: '#1e1f20' }}>720p HD</option>
-              <option value="480p" style={{ background: '#1e1f20' }}>480p Standard</option>
+              <option value="1080p" style={{ background: '#ffffff' }}>1080p Full HD</option>
+              <option value="720p" style={{ background: '#ffffff' }}>720p HD</option>
+              <option value="480p" style={{ background: '#ffffff' }}>480p Standard</option>
             </select>
           </div>
 
@@ -509,7 +533,7 @@ export default function MeetingRoom({
             {participants.length + 1} Connected
           </span>
           {isRecording && (
-            <span className="badge badge-rose" style={{ background: 'rgba(234,67,53,0.2)', color: '#ea4335', border: '1px solid rgba(234,67,53,0.4)' }}>
+            <span className="badge badge-rose" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
               <Radio size={12} className="pulse" /> Recording
             </span>
           )}
