@@ -56,6 +56,8 @@ export default function MeetingRoom({
   const [audioBlocked, setAudioBlocked] = useState(false);
 
   const [localStream, setLocalStream] = useState(null);
+  const localStreamRef = useRef(null);
+
   const [screenStream, setScreenStream] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [remoteStreams, setRemoteStreams] = useState(new Map()); // Map<socketId, MediaStream>
@@ -64,6 +66,11 @@ export default function MeetingRoom({
   const [sharedNotes, setSharedNotes] = useState('');
   const [polls, setPolls] = useState([]);
   const [floatingReactions, setFloatingReactions] = useState([]);
+
+  // PeerConnections Ref: Map<socketId, RTCPeerConnection>
+  const peerConnections = useRef(new Map());
+  // ICE Candidate Queues: Map<socketId, RTCIceCandidate[]>
+  const iceCandidatesQueue = useRef(new Map());
 
   const handleSendReaction = (emoji) => {
     const reaction = {
@@ -78,24 +85,16 @@ export default function MeetingRoom({
     }, 3500);
   };
 
-  // PeerConnections Ref: Map<socketId, RTCPeerConnection>
-  const peerConnections = useRef(new Map());
-  // ICE Candidate Queues: Map<socketId, RTCIceCandidate[]>
-  const iceCandidatesQueue = useRef(new Map());
-
-  // 1. Initialize Local HD Media Stream (Mic & Camera) FIRST
+  // 1. Initialize Local HD Media Stream ONCE on mount
   useEffect(() => {
     let currentStream = null;
 
     async function initMedia() {
       try {
-        const widthConstraint = videoQuality === '1080p' ? { ideal: 1920, min: 1280 } : videoQuality === '720p' ? { ideal: 1280, min: 960 } : { ideal: 640 };
-        const heightConstraint = videoQuality === '1080p' ? { ideal: 1080, min: 720 } : videoQuality === '720p' ? { ideal: 720, min: 540 } : { ideal: 480 };
-
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: widthConstraint,
-            height: heightConstraint,
+            width: { ideal: 1920, min: 1280 },
+            height: { ideal: 1080, min: 720 },
             frameRate: { ideal: 30, max: 60 },
             facingMode: 'user'
           },
@@ -108,25 +107,15 @@ export default function MeetingRoom({
 
         currentStream = stream;
         setLocalStream(stream);
+        localStreamRef.current = stream;
 
-        // Update local tracks on existing peer connections
-        peerConnections.current.forEach((pc) => {
-          const senders = pc.getSenders();
-          stream.getTracks().forEach((track) => {
-            const sender = senders.find(s => s.track && s.track.kind === track.kind);
-            if (sender) {
-              sender.replaceTrack(track);
-            } else {
-              pc.addTrack(track, stream);
-            }
-          });
-        });
       } catch (err) {
         console.warn('HD camera fallback to standard constraints:', err);
         try {
           const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
           currentStream = fallbackStream;
           setLocalStream(fallbackStream);
+          localStreamRef.current = fallbackStream;
         } catch (e) {
           console.error('Media devices access error:', e);
         }
@@ -150,9 +139,24 @@ export default function MeetingRoom({
         currentStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [videoQuality]);
+  }, []); // Run ONCE on mount so stream is never recreated unnecessarily
 
-  // 2. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Deterministically Handles 3+ Participants)
+  // 2. Dynamic Video Quality Constraint Adjuster (Without destroying peer connections or causing black screens!)
+  useEffect(() => {
+    if (!localStream) return;
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (videoTrack && videoTrack.applyConstraints) {
+      const widthConstraint = videoQuality === '1080p' ? { ideal: 1920 } : videoQuality === '720p' ? { ideal: 1280 } : { ideal: 640 };
+      const heightConstraint = videoQuality === '1080p' ? { ideal: 1080 } : videoQuality === '720p' ? { ideal: 720 } : { ideal: 480 };
+
+      videoTrack.applyConstraints({
+        width: widthConstraint,
+        height: heightConstraint
+      }).catch(err => console.warn('applyConstraints resolution change notice:', err));
+    }
+  }, [videoQuality, localStream]);
+
+  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine
   useEffect(() => {
     if (!socket || !localStream) return;
 
@@ -174,9 +178,12 @@ export default function MeetingRoom({
       peerConnections.current.set(targetId, pc);
 
       // Add local media tracks (Audio & Video) to PeerConnection
-      localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, localStream);
-      });
+      const activeStream = localStreamRef.current || localStream;
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => {
+          pc.addTrack(track, activeStream);
+        });
+      }
 
       // Handle ICE Candidates
       pc.onicecandidate = (event) => {
@@ -239,7 +246,7 @@ export default function MeetingRoom({
       return pc;
     };
 
-    // Socket Event: Room Joined (Current client receives list of all participants in room)
+    // Socket Event: Room Joined
     socket.on('room-joined', (data) => {
       const allPeers = data.participants.filter(p => p.id !== socket.id);
       setParticipants(allPeers);
@@ -255,7 +262,7 @@ export default function MeetingRoom({
       });
     });
 
-    // Socket Event: User Connected (Fired on existing clients when a new peer joins)
+    // Socket Event: User Connected
     socket.on('user-connected', ({ user, participants: allParticipants }) => {
       const currentRemotePeers = allParticipants.filter(p => p.id !== socket.id);
       setParticipants(currentRemotePeers);
@@ -336,7 +343,7 @@ export default function MeetingRoom({
       }
     });
 
-    // Socket event: Media state changes
+    // Auxiliary Real-Time Socket Events
     socket.on('media-state-changed', ({ participants: updatedParticipants }) => {
       setParticipants(updatedParticipants.filter(p => p.id !== socket.id));
     });
@@ -370,6 +377,7 @@ export default function MeetingRoom({
       socket.off('user-disconnected');
       socket.off('signal');
       socket.off('media-state-changed');
+      socket.off('reaction-received');
       socket.off('poll-created');
       socket.off('poll-updated');
       socket.off('room-lock-changed');
