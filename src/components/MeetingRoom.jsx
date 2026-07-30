@@ -170,9 +170,9 @@ export default function MeetingRoom({
         currentStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []); // Run ONCE on mount so stream is never recreated unnecessarily
+  }, []);
 
-  // 2. Dynamic Video Quality Constraint Adjuster (Without destroying peer connections or causing black screens!)
+  // 2. Dynamic Video Quality Constraint Adjuster
   useEffect(() => {
     if (!localStream) return;
     const videoTrack = localStream.getVideoTracks()[0];
@@ -187,7 +187,7 @@ export default function MeetingRoom({
     }
   }, [videoQuality, localStream]);
 
-  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine
+  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Scalable up to 200+ Participants)
   useEffect(() => {
     if (!socket || !localStream) return;
 
@@ -202,6 +202,13 @@ export default function MeetingRoom({
     const createPeerConnection = (targetId, isInitiator) => {
       if (peerConnections.current.has(targetId)) {
         return peerConnections.current.get(targetId);
+      }
+
+      // Hard Cap Guard for WebRTC Connections Limit (Max 120 PeerConnections)
+      const MAX_PEERS = 120;
+      if (peerConnections.current.size >= MAX_PEERS) {
+        console.warn(`[Scale Limit Guard] Reached max WebRTC peer connections limit (${MAX_PEERS}). Skipping WebRTC P2P for user ${targetId}.`);
+        return null;
       }
 
       console.log(`[WebRTC Engine] Creating RTCPeerConnection for target: ${targetId} (Initiator: ${isInitiator})`);
@@ -226,7 +233,7 @@ export default function MeetingRoom({
         }
       };
 
-      // Handle Connection State Changes (Auto-reconnect on failure)
+      // Handle Connection State Changes
       pc.onconnectionstatechange = () => {
         console.log(`[WebRTC Connection State] Peer ${targetId}: ${pc.connectionState}`);
         if (pc.connectionState === 'failed') {
@@ -288,7 +295,7 @@ export default function MeetingRoom({
       setIsLocked(!!data.isLocked);
       setIsE2EE(!!data.isE2EE);
 
-      // Joiner initiates WebRTC offers to all existing peers in the room
+      // Joiner initiates WebRTC offers to existing peers in room
       allPeers.forEach((peer) => {
         createPeerConnection(peer.id, true);
       });
@@ -319,18 +326,18 @@ export default function MeetingRoom({
       });
     });
 
-    // Socket Event: WebRTC Signaling Relay (Offer / Answer / Candidate)
+    // Socket Event: WebRTC Signaling Relay
     socket.on('signal', async ({ senderId, signal }) => {
       let pc = peerConnections.current.get(senderId);
       if (!pc) {
         pc = createPeerConnection(senderId, false);
       }
+      if (!pc) return;
 
       try {
         if (signal.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
           
-          // Process queued ICE candidates
           if (iceCandidatesQueue.current.has(senderId)) {
             const queue = iceCandidatesQueue.current.get(senderId);
             for (const cand of queue) {
@@ -350,7 +357,6 @@ export default function MeetingRoom({
         } else if (signal.type === 'answer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
 
-          // Process queued ICE candidates
           if (iceCandidatesQueue.current.has(senderId)) {
             const queue = iceCandidatesQueue.current.get(senderId);
             for (const cand of queue) {
@@ -363,7 +369,6 @@ export default function MeetingRoom({
           if (pc.remoteDescription && pc.remoteDescription.type) {
             await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
           } else {
-            // Queue candidate until remote description is set
             if (!iceCandidatesQueue.current.has(senderId)) {
               iceCandidatesQueue.current.set(senderId, []);
             }
@@ -375,9 +380,23 @@ export default function MeetingRoom({
       }
     });
 
-    // Auxiliary Real-Time Socket Events
-    socket.on('media-state-changed', ({ participants: updatedParticipants }) => {
-      setParticipants(updatedParticipants.filter(p => p.id !== socket.id));
+    // Socket Event: Optimized Granular Media State Changes
+    socket.on('media-state-changed', (data) => {
+      if (data.participants) {
+        setParticipants(data.participants.filter(p => p.id !== socket.id));
+      } else if (data.userId) {
+        setParticipants(prev => prev.map(p => {
+          if (p.id === data.userId) {
+            return {
+              ...p,
+              audioMuted: data.audioMuted !== undefined ? data.audioMuted : p.audioMuted,
+              videoMuted: data.videoMuted !== undefined ? data.videoMuted : p.videoMuted,
+              handRaised: data.handRaised !== undefined ? data.handRaised : p.handRaised
+            };
+          }
+          return p;
+        }));
+      }
     });
 
     socket.on('reaction-received', (reaction) => {
@@ -415,7 +434,6 @@ export default function MeetingRoom({
       socket.off('room-lock-changed');
       socket.off('e2ee-changed');
 
-      // Close all peer connections on unmount
       peerConnections.current.forEach(pc => pc.close());
       peerConnections.current.clear();
     };
@@ -454,7 +472,6 @@ export default function MeetingRoom({
       setScreenStream(null);
       setScreenOn(false);
 
-      // Restore camera track to all active peer connections
       if (localStream) {
         const videoTrack = localStream.getVideoTracks()[0];
         if (videoTrack) {
@@ -472,7 +489,6 @@ export default function MeetingRoom({
 
         const screenTrack = stream.getVideoTracks()[0];
 
-        // Replace video track with screen track on all peer connections
         peerConnections.current.forEach((pc) => {
           const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
           if (sender) {
@@ -501,7 +517,6 @@ export default function MeetingRoom({
     }
   };
 
-  // Unmute Autoplay Unlocker
   const handleUnlockAudio = () => {
     setAudioBlocked(false);
     document.querySelectorAll('audio, video').forEach(media => {
