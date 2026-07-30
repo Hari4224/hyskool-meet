@@ -187,11 +187,11 @@ export default function MeetingRoom({
     }
   }, [videoQuality, localStream]);
 
-  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Scalable up to 200+ Participants)
+  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Immediate Room Join)
   useEffect(() => {
-    if (!socket || !localStream) return;
+    if (!socket) return;
 
-    // Join Socket Room once local media is ready
+    // Join Socket Room immediately on mount so 3rd, 4th, and 100th participants join instantly
     socket.emit('join-room', {
       roomId: roomData.roomId,
       userName: roomData.userName,
@@ -437,7 +437,23 @@ export default function MeetingRoom({
       peerConnections.current.forEach(pc => pc.close());
       peerConnections.current.clear();
     };
-  }, [socket, roomData, localStream]);
+  }, [socket, roomData]);
+
+  // 4. Sync local tracks to all active peer connections whenever localStream is acquired or updated
+  useEffect(() => {
+    if (!localStream) return;
+    peerConnections.current.forEach((pc) => {
+      const senders = pc.getSenders();
+      localStream.getTracks().forEach((track) => {
+        const sender = senders.find(s => s.track && s.track.kind === track.kind);
+        if (sender) {
+          sender.replaceTrack(track);
+        } else {
+          pc.addTrack(track, localStream);
+        }
+      });
+    });
+  }, [localStream]);
 
   // Mic Toggle
   const handleToggleMic = () => {
