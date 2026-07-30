@@ -225,7 +225,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Media Controls (Mic, Cam, Hand Raise)
+  // Media Controls (Mic, Cam, Hand Raise) - Throttled for 100+ users
   socket.on('update-media-state', ({ audioMuted, videoMuted, handRaised }) => {
     if (!currentRoomId || !activeRooms.has(currentRoomId)) return;
     const room = activeRooms.get(currentRoomId);
@@ -235,7 +235,8 @@ io.on('connection', (socket) => {
       if (videoMuted !== undefined) user.videoMuted = videoMuted;
       if (handRaised !== undefined) user.handRaised = handRaised;
 
-      io.to(currentRoomId).emit('media-state-changed', {
+      // Broadcast light payload to prevent socket network congestion in 100+ rooms
+      socket.to(currentRoomId).emit('media-state-changed', {
         userId: socket.id,
         audioMuted: user.audioMuted,
         videoMuted: user.videoMuted,

@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Mic, MicOff, Shield, Hand, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mic, MicOff, Shield, Hand, Sparkles, ChevronLeft, ChevronRight, Grid, Users } from 'lucide-react';
 
 function RemoteParticipantTile({ participant, stream }) {
   const videoCallbackRef = (videoEl) => {
@@ -64,6 +64,9 @@ export default function VideoGrid({
   isE2EE,
   videoQuality = '1080p'
 }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 6; // Max 6 active video tiles per page for 100+ user scalability
+
   const localVideoCallbackRef = (videoEl) => {
     if (videoEl && localStream && !localUser?.videoMuted) {
       if (videoEl.srcObject !== localStream) {
@@ -82,11 +85,28 @@ export default function VideoGrid({
     }
   };
 
-  const totalCount = participants.length + 1;
-  const gridClass = totalCount === 1 ? 'count-1' : totalCount === 2 ? 'count-2' : (totalCount === 3 || totalCount === 4) ? 'count-4' : 'count-many';
+  // Sort active speakers first for 100+ user rooms
+  const sortedParticipants = [...participants].sort((a, b) => {
+    if (a.handRaised && !b.handRaised) return -1;
+    if (!a.audioMuted && b.audioMuted) return -1;
+    return 0;
+  });
+
+  const totalParticipantsCount = participants.length + 1; // Including Local User
+  const totalPages = Math.ceil(totalParticipantsCount / pageSize);
+
+  // Calculate current page slice
+  // Page 1 holds Local User + first (pageSize - 1) remote participants
+  const isPageOne = currentPage === 1;
+  const startIndex = isPageOne ? 0 : (currentPage - 1) * pageSize - 1;
+  const endIndex = isPageOne ? pageSize - 1 : startIndex + pageSize;
+  const visibleRemoteParticipants = sortedParticipants.slice(startIndex, endIndex);
+
+  const displayCount = (isPageOne ? 1 : 0) + visibleRemoteParticipants.length;
+  const gridClass = displayCount === 1 ? 'count-1' : displayCount === 2 ? 'count-2' : (displayCount === 3 || displayCount === 4) ? 'count-4' : 'count-many';
 
   return (
-    <div className="gmeet-video-section">
+    <div className="gmeet-video-section" style={{ flexDirection: 'column', position: 'relative' }}>
       {/* Screen Share Stage Spotlight if active */}
       {screenStream ? (
         <div style={{ display: 'flex', gap: 16, width: '100%', height: '100%' }}>
@@ -125,33 +145,75 @@ export default function VideoGrid({
         </div>
       ) : (
         /* Standard Google Meet Dynamic Full Screen Grid */
-        <div className={`gmeet-grid ${gridClass}`}>
-          {/* Local Participant Card */}
-          <div className={`gmeet-tile ${!localUser?.audioMuted ? 'speaking' : ''}`}>
-            {localStream && !localUser?.videoMuted ? (
-              <video ref={localVideoCallbackRef} autoPlay muted playsInline className="gmeet-video" />
-            ) : (
-              <div className="avatar-placeholder-gmeet">
-                {localUser?.name ? localUser.name.substring(0, 2).toUpperCase() : 'ME'}
+        <div className={`gmeet-grid ${gridClass}`} style={{ flex: 1 }}>
+          {/* Local Participant Card (Rendered on Page 1) */}
+          {isPageOne && (
+            <div className={`gmeet-tile ${!localUser?.audioMuted ? 'speaking' : ''}`}>
+              {localStream && !localUser?.videoMuted ? (
+                <video ref={localVideoCallbackRef} autoPlay muted playsInline className="gmeet-video" />
+              ) : (
+                <div className="avatar-placeholder-gmeet">
+                  {localUser?.name ? localUser.name.substring(0, 2).toUpperCase() : 'ME'}
+                </div>
+              )}
+
+              <div className="gmeet-name-pill">
+                {localUser?.audioMuted ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#059669" />}
+                <span>{localUser?.name || 'You'} (You)</span>
+                {localUser?.handRaised && <Hand size={14} color="#f59e0b" />}
+                {isE2EE && <Shield size={12} color="#0284c7" title="E2EE Encrypted" />}
               </div>
-            )}
-
-            <div className="gmeet-name-pill">
-              {localUser?.audioMuted ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#059669" />}
-              <span>{localUser?.name || 'You'} (You)</span>
-              {localUser?.handRaised && <Hand size={14} color="#f59e0b" />}
-              {isE2EE && <Shield size={12} color="#0284c7" title="E2EE Encrypted" />}
             </div>
-          </div>
+          )}
 
-          {/* Remote Participants */}
-          {participants.map((participant) => (
+          {/* Remote Participants for current page */}
+          {visibleRemoteParticipants.map((participant) => (
             <RemoteParticipantTile 
               key={participant.id} 
               participant={participant} 
               stream={remoteStreams.get(participant.id)} 
             />
           ))}
+        </div>
+      )}
+
+      {/* 100+ User Scale Pagination Controls Bar */}
+      {totalPages > 1 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(12px)',
+          padding: '8px 20px',
+          borderRadius: 'var(--radius-full)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+          border: '1px solid var(--glass-border)',
+          marginTop: 12,
+          zIndex: 10
+        }}>
+          <button 
+            className="btn btn-secondary" 
+            style={{ padding: '4px 10px', borderRadius: '50%', width: 32, height: 32 }}
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
+            <Users size={14} style={{ display: 'inline', marginRight: 6, color: '#0284c7' }} />
+            Page {currentPage} of {totalPages} ({totalParticipantsCount} Connected)
+          </span>
+
+          <button 
+            className="btn btn-secondary" 
+            style={{ padding: '4px 10px', borderRadius: '50%', width: 32, height: 32 }}
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
       )}
     </div>
