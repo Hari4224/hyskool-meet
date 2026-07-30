@@ -6,10 +6,10 @@ WORKDIR /app
 # Copy dependency manifests
 COPY package*.json ./
 
-# Install production dependencies
-RUN npm ci --only=production
+# Install all dependencies (including devDependencies required for Vite build)
+RUN npm ci
 
-# Copy source code & pre-built dist assets
+# Copy source code & assets
 COPY . .
 
 # Build Vite frontend assets for production
