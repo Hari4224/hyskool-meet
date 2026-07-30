@@ -5,6 +5,7 @@ export default function PollsModal({ socket, roomId, polls = [], onClose }) {
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['Option 1', 'Option 2']);
   const [isQuiz, setIsQuiz] = useState(false);
+  const [votedPolls, setVotedPolls] = useState(new Set());
 
   const handleAddOption = () => {
     if (options.length < 5) {
@@ -29,8 +30,10 @@ export default function PollsModal({ socket, roomId, polls = [], onClose }) {
   };
 
   const handleVote = (pollId, optionIndex) => {
+    if (votedPolls.has(pollId)) return;
     if (socket) {
       socket.emit('vote-poll', { pollId, optionIndex });
+      setVotedPolls(prev => new Set(prev).add(pollId));
     }
   };
 

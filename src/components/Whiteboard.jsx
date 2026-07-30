@@ -183,6 +183,24 @@ export default function Whiteboard({ socket, roomId, initialElements = [] }) {
     link.click();
   };
 
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches[0]) {
+      const touch = e.touches[0];
+      handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY });
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches && e.touches[0]) {
+      const touch = e.touches[0];
+      handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    handleMouseUp(e);
+  };
+
   return (
     <div className="whiteboard-container">
       {/* Toolbar */}
@@ -232,7 +250,10 @@ export default function Whiteboard({ socket, roomId, initialElements = [] }) {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        style={{ cursor: tool === 'eraser' ? 'cell' : 'crosshair', background: '#020617', width: '100%', height: '100%' }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ cursor: tool === 'eraser' ? 'cell' : 'crosshair', background: '#020617', width: '100%', height: '100%', touchAction: 'none' }}
       />
     </div>
   );

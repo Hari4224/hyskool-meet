@@ -363,7 +363,7 @@ export default function MeetingRoom({
     }
   };
 
-  // Screen Share Toggle
+  // Screen Share Toggle with WebRTC Track Replacement
   const handleToggleScreen = async () => {
     if (screenOn) {
       if (screenStream) {
@@ -371,14 +371,47 @@ export default function MeetingRoom({
       }
       setScreenStream(null);
       setScreenOn(false);
+
+      // Restore camera track to all active peer connections
+      if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+          peerConnections.current.forEach((pc) => {
+            const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) sender.replaceTrack(videoTrack);
+          });
+        }
+      }
     } else {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         setScreenStream(stream);
         setScreenOn(true);
-        stream.getVideoTracks()[0].onended = () => {
+
+        const screenTrack = stream.getVideoTracks()[0];
+
+        // Replace video track with screen track on all peer connections
+        peerConnections.current.forEach((pc) => {
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) {
+            sender.replaceTrack(screenTrack);
+          } else {
+            pc.addTrack(screenTrack, stream);
+          }
+        });
+
+        screenTrack.onended = () => {
           setScreenStream(null);
           setScreenOn(false);
+          if (localStream) {
+            const camTrack = localStream.getVideoTracks()[0];
+            if (camTrack) {
+              peerConnections.current.forEach((pc) => {
+                const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                if (sender) sender.replaceTrack(camTrack);
+              });
+            }
+          }
         };
       } catch (err) {
         console.warn('Screen share cancelled:', err);
