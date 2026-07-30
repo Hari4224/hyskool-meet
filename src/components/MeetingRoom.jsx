@@ -117,7 +117,7 @@ export default function MeetingRoom({
     }, 3500);
   };
 
-  // 1. Initialize Local HD Media Stream ONCE on mount
+  // 1. Initialize Local HD Media Stream ONCE on mount (Cross-Device Compatible for Windows, Android, iOS)
   useEffect(() => {
     let currentStream = null;
 
@@ -132,10 +132,13 @@ export default function MeetingRoom({
           },
           audio: {
             echoCancellation: true,
-            noiseSuppression: true,
+            noiseSuppression: false, // Ensures Windows & Android mic drivers do not attenuate volume to 0
             autoGainControl: true
           }
         });
+
+        // Force enable all audio tracks
+        stream.getAudioTracks().forEach(t => { t.enabled = true; });
 
         currentStream = stream;
         setLocalStream(stream);
@@ -145,6 +148,7 @@ export default function MeetingRoom({
         console.warn('HD camera fallback to standard constraints:', err);
         try {
           const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          fallbackStream.getAudioTracks().forEach(t => { t.enabled = true; });
           currentStream = fallbackStream;
           setLocalStream(fallbackStream);
           localStreamRef.current = fallbackStream;
@@ -188,7 +192,7 @@ export default function MeetingRoom({
     }
   }, [videoQuality, localStream]);
 
-  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine
+  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Cross-Platform Audio Transceivers)
   useEffect(() => {
     if (!socket) return;
 
@@ -199,7 +203,7 @@ export default function MeetingRoom({
       userRole: roomData.userRole
     });
 
-    // Helper: Create RTCPeerConnection for a target peer with forced Audio & Video Transceivers
+    // Helper: Create RTCPeerConnection for a target peer with clean single-transceiver SDP binding
     const createPeerConnection = (targetId, isInitiator) => {
       if (peerConnections.current.has(targetId)) {
         return peerConnections.current.get(targetId);
@@ -207,7 +211,7 @@ export default function MeetingRoom({
 
       const MAX_PEERS = 120;
       if (peerConnections.current.size >= MAX_PEERS) {
-        console.warn(`[Scale Limit Guard] Reached max WebRTC peer connections limit (${MAX_PEERS}). Skipping WebRTC P2P for user ${targetId}.`);
+        console.warn(`[Scale Limit Guard] Reached max WebRTC peer connections limit (${MAX_PEERS}).`);
         return null;
       }
 
@@ -215,26 +219,22 @@ export default function MeetingRoom({
       const pc = new RTCPeerConnection(ICE_SERVERS);
       peerConnections.current.set(targetId, pc);
 
-      // GUARANTEE Audio and Video Transceivers exist in SDP
-      try {
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
-        pc.addTransceiver('video', { direction: 'sendrecv' });
-      } catch (e) {
-        console.warn('Transceiver notice:', e);
-      }
-
-      // Add local media tracks (Audio & Video) to PeerConnection
       const activeStream = localStreamRef.current || localStream;
-      if (activeStream) {
+
+      // Clean single transceiver binding per track (Fixes Windows Chrome & Android Chrome audio muting)
+      if (activeStream && activeStream.getTracks().length > 0) {
         activeStream.getTracks().forEach((track) => {
-          const senders = pc.getSenders();
-          const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
-          if (existingSender) {
-            existingSender.replaceTrack(track);
-          } else {
+          try {
+            pc.addTransceiver(track, { direction: 'sendrecv', streams: [activeStream] });
+          } catch (e) {
             pc.addTrack(track, activeStream);
           }
         });
+      } else {
+        try {
+          pc.addTransceiver('audio', { direction: 'sendrecv' });
+          pc.addTransceiver('video', { direction: 'sendrecv' });
+        } catch (e) {}
       }
 
       // Handle ICE Candidates
@@ -462,8 +462,11 @@ export default function MeetingRoom({
         if (sender) {
           sender.replaceTrack(track);
         } else {
-          pc.addTrack(track, localStream);
-          // Trigger renegotiation offer if connection is stable
+          try {
+            pc.addTransceiver(track, { direction: 'sendrecv', streams: [localStream] });
+          } catch (e) {
+            pc.addTrack(track, localStream);
+          }
           if (pc.signalingState === 'stable') {
             pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
               .then(offer => pc.setLocalDescription(offer))
