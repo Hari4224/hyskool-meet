@@ -28,8 +28,12 @@ export default function ControlBar({
   const [showEmojiMenu, setShowEmojiMenu] = useState(false);
   const emojis = ['👍', '❤️', '👏', '🎉', '🔥', '🤣'];
 
-  const handleSelectEmoji = (emoji) => {
-    if (onSendReaction) onSendReaction(emoji);
+  const handleSelectEmoji = (e, emoji) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onSendReaction) {
+      onSendReaction(emoji);
+    }
     setShowEmojiMenu(false);
   };
 
@@ -37,6 +41,7 @@ export default function ControlBar({
     <div className="control-bar" style={{ position: 'relative' }}>
       {/* Audio Toggle */}
       <button 
+        type="button"
         className={`control-btn ${micOn ? '' : 'off'}`} 
         onClick={onToggleMic}
         title={micOn ? 'Mute Microphone' : 'Unmute Microphone'}
@@ -46,6 +51,7 @@ export default function ControlBar({
 
       {/* Camera Toggle */}
       <button 
+        type="button"
         className={`control-btn ${camOn ? '' : 'off'}`} 
         onClick={onToggleCam}
         title={camOn ? 'Turn Off Camera' : 'Turn On Camera'}
@@ -55,6 +61,7 @@ export default function ControlBar({
 
       {/* Screen Share */}
       <button 
+        type="button"
         className={`control-btn ${screenOn ? 'active' : ''}`} 
         onClick={onToggleScreen}
         title="Share Screen"
@@ -64,8 +71,12 @@ export default function ControlBar({
 
       {/* Jitsi Meet Live Reaction Emojis */}
       <button 
+        type="button"
         className={`control-btn ${showEmojiMenu ? 'active' : ''}`} 
-        onClick={() => setShowEmojiMenu(!showEmojiMenu)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowEmojiMenu(!showEmojiMenu);
+        }}
         title="Send Reaction Emoji"
       >
         <Smile size={20} />
@@ -73,40 +84,44 @@ export default function ControlBar({
 
       {/* Floating Emoji Picker Menu */}
       {showEmojiMenu && (
-        <div style={{
-          position: 'absolute',
-          bottom: '88px',
-          background: '#ffffff',
-          padding: '8px 14px',
-          borderRadius: 'var(--radius-full)',
-          display: 'flex',
-          gap: 12,
-          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
-          border: '1px solid var(--glass-border)',
-          zIndex: 100
-        }}>
-          {emojis.map(e => (
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            bottom: '88px',
+            background: '#ffffff',
+            padding: '8px 14px',
+            borderRadius: 'var(--radius-full)',
+            display: 'flex',
+            gap: 12,
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)',
+            border: '1px solid var(--glass-border)',
+            zIndex: 999
+          }}
+        >
+          {emojis.map(emoji => (
             <button 
-              key={e}
+              key={emoji}
+              type="button"
               style={{
                 background: 'none',
                 border: 'none',
-                fontSize: '1.4rem',
+                fontSize: '1.5rem',
                 cursor: 'pointer',
-                transition: 'transform 0.15s ease'
+                transition: 'transform 0.15s ease',
+                padding: '4px'
               }}
-              onMouseEnter={(el) => el.target.style.transform = 'scale(1.3)'}
-              onMouseLeave={(el) => el.target.style.transform = 'scale(1)'}
-              onClick={() => handleSelectEmoji(e)}
+              onClick={(e) => handleSelectEmoji(e, emoji)}
             >
-              {e}
+              {emoji}
             </button>
           ))}
         </div>
       )}
 
-      {/* Whiteboard Toggle (BigBlueButton feature) */}
+      {/* Whiteboard Toggle */}
       <button 
+        type="button"
         className={`control-btn ${activePanel === 'whiteboard' ? 'active' : ''}`} 
         onClick={() => onTogglePanel('whiteboard')}
         title="Interactive Whiteboard & Slides"
@@ -114,8 +129,9 @@ export default function ControlBar({
         <PenTool size={20} />
       </button>
 
-      {/* In-Meeting Chat (Rocket.Chat feature) */}
+      {/* In-Meeting Chat */}
       <button 
+        type="button"
         className={`control-btn ${activePanel === 'chat' ? 'active' : ''}`} 
         onClick={() => onTogglePanel('chat')}
         title="Chat & Messaging"
@@ -125,6 +141,7 @@ export default function ControlBar({
 
       {/* Live Polls & Quizzes */}
       <button 
+        type="button"
         className={`control-btn ${activePanel === 'polls' ? 'active' : ''}`} 
         onClick={() => onTogglePanel('polls')}
         title="Live Polls & Quizzes"
@@ -134,6 +151,7 @@ export default function ControlBar({
 
       {/* Shared Notes Pad */}
       <button 
+        type="button"
         className={`control-btn ${activePanel === 'notes' ? 'active' : ''}`} 
         onClick={() => onTogglePanel('notes')}
         title="Collaborative Shared Notes"
@@ -141,8 +159,9 @@ export default function ControlBar({
         <FileText size={20} />
       </button>
 
-      {/* SIP / H.323 Virtual Dialer (TrueConf feature) */}
+      {/* SIP / H.323 Virtual Dialer */}
       <button 
+        type="button"
         className={`control-btn ${activePanel === 'sip' ? 'active' : ''}`} 
         onClick={() => onTogglePanel('sip')}
         title="SIP / PSTN Phone Dialer Bridge"
@@ -152,6 +171,7 @@ export default function ControlBar({
 
       {/* Raise Hand */}
       <button 
+        type="button"
         className={`control-btn ${handRaised ? 'active' : ''}`} 
         onClick={onToggleHand}
         title="Raise / Lower Hand"
@@ -161,6 +181,7 @@ export default function ControlBar({
 
       {/* Local Recording */}
       <button 
+        type="button"
         className={`control-btn ${isRecording ? 'off' : ''}`} 
         onClick={onToggleRecording}
         title={isRecording ? 'Stop Recording' : 'Start Local Recording'}
@@ -170,6 +191,7 @@ export default function ControlBar({
 
       {/* Security E2EE & Lock */}
       <button 
+        type="button"
         className={`control-btn ${isE2EE ? 'active' : ''}`} 
         onClick={onToggleE2EE}
         title="End-to-End Encryption (E2EE)"
@@ -178,6 +200,7 @@ export default function ControlBar({
       </button>
 
       <button 
+        type="button"
         className={`control-btn ${isLocked ? 'active' : ''}`} 
         onClick={onToggleLock}
         title={isLocked ? 'Unlock Room' : 'Lock Room (Enable Lobby)'}
@@ -187,6 +210,7 @@ export default function ControlBar({
 
       {/* App Integration Modal Trigger */}
       <button 
+        type="button"
         className="control-btn" 
         onClick={onOpenIntegrationModal}
         title="Embed Code & API SDK"
@@ -196,6 +220,7 @@ export default function ControlBar({
 
       {/* Leave Meeting */}
       <button 
+        type="button"
         className="control-btn off" 
         onClick={onLeaveMeeting}
         style={{ marginLeft: 16 }}
