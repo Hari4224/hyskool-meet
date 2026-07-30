@@ -69,7 +69,7 @@ export default function VideoGrid({
   videoQuality = '1080p'
 }) {
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 6;
+  const pageSize = 9; // Up to 9 active video tiles per page (fits 5 to 9 people on 1 screen)
 
   const localVideoCallbackRef = (videoEl) => {
     if (videoEl && localStream && !localUser?.videoMuted) {
@@ -105,7 +105,14 @@ export default function VideoGrid({
   const visibleRemoteParticipants = sortedParticipants.slice(startIndex, endIndex);
 
   const displayCount = (isPageOne ? 1 : 0) + visibleRemoteParticipants.length;
-  const gridClass = displayCount === 1 ? 'count-1' : displayCount === 2 ? 'count-2' : (displayCount === 3 || displayCount === 4) ? 'count-4' : 'count-many';
+  
+  // Dynamic grid CSS layout selector
+  const gridClass = displayCount === 1 ? 'count-1' 
+    : displayCount === 2 ? 'count-2' 
+    : (displayCount >= 3 && displayCount <= 4) ? 'count-4' 
+    : (displayCount >= 5 && displayCount <= 6) ? 'count-6' 
+    : (displayCount >= 7 && displayCount <= 9) ? 'count-9' 
+    : 'count-many';
 
   return (
     <div className="gmeet-video-section" style={{ flexDirection: 'column', position: 'relative' }}>

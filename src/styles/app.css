@@ -329,9 +329,42 @@ body {
   display: grid;
   width: 100%;
   height: 100%;
-  gap: 20px;
+  gap: 16px;
   align-items: center;
   justify-content: center;
+}
+
+.gmeet-grid.count-1 {
+  grid-template-columns: 1fr;
+  max-width: 1040px;
+  max-height: 80vh;
+  margin: 0 auto;
+}
+
+.gmeet-grid.count-2 {
+  grid-template-columns: 1fr 1fr;
+  max-width: 1200px;
+  max-height: 80vh;
+  margin: 0 auto;
+}
+
+.gmeet-grid.count-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.gmeet-grid.count-6 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: 1fr 1fr;
+}
+
+.gmeet-grid.count-9 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.gmeet-grid.count-many {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 /* Next-Gen Ultra-Premium Video Tile Cards */
