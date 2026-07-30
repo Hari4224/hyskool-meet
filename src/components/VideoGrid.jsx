@@ -5,11 +5,11 @@ function RemoteParticipantTile({ participant, stream }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
+    if (videoRef.current && stream && !participant.videoMuted) {
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(err => console.warn('Remote video playback error:', err));
     }
-  }, [stream]);
+  }, [stream, participant.videoMuted]);
 
   return (
     <div className={`gmeet-tile ${!participant.audioMuted ? 'speaking' : ''}`}>
@@ -63,10 +63,11 @@ export default function VideoGrid({
   const screenVideoRef = useRef(null);
 
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
+    if (localVideoRef.current && localStream && !localUser?.videoMuted) {
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(() => {});
     }
-  }, [localStream]);
+  }, [localStream, localUser?.videoMuted]);
 
   useEffect(() => {
     if (screenVideoRef.current && screenStream) {
