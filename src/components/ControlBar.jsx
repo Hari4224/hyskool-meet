@@ -10,6 +10,7 @@ export default function ControlBar({
   screenOn,
   activePanel,
   handRaised,
+  unreadChatCount = 0,
   isRecording,
   isE2EE,
   isLocked,
@@ -135,8 +136,30 @@ export default function ControlBar({
         className={`control-btn ${activePanel === 'chat' ? 'active' : ''}`} 
         onClick={() => onTogglePanel('chat')}
         title="Chat & Messaging"
+        style={{ position: 'relative' }}
       >
         <MessageSquare size={20} />
+        {unreadChatCount > 0 && (
+          <span style={{
+            position: 'absolute',
+            top: -4,
+            right: -4,
+            background: '#ef4444',
+            color: 'white',
+            borderRadius: '50%',
+            width: 20,
+            height: 20,
+            fontSize: '0.7rem',
+            fontWeight: 800,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.5)',
+            border: '2px solid #ffffff'
+          }}>
+            {unreadChatCount > 9 ? '9+' : unreadChatCount}
+          </span>
+        )}
       </button>
 
       {/* Live Polls & Quizzes */}

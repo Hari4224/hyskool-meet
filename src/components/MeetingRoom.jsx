@@ -67,6 +67,37 @@ export default function MeetingRoom({
   const [polls, setPolls] = useState([]);
   const [floatingReactions, setFloatingReactions] = useState([]);
 
+  // Persistent Chat Messages & Unread Count State
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: 'welcome-1',
+      senderName: 'HYSKOOL System',
+      text: 'Welcome to HYSKOOL MEET! Messaging is end-to-end encrypted and self-hosted.',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isSystem: true
+    }
+  ]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  // Persistent Chat Socket Listener
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('chat-message', (msgData) => {
+      setChatMessages(prev => [...prev, msgData]);
+      setActivePanel(currentPanel => {
+        if (currentPanel !== 'chat') {
+          setUnreadChatCount(count => count + 1);
+        }
+        return currentPanel;
+      });
+    });
+
+    return () => {
+      socket.off('chat-message');
+    };
+  }, [socket]);
+
   // PeerConnections Ref: Map<socketId, RTCPeerConnection>
   const peerConnections = useRef(new Map());
   // ICE Candidate Queues: Map<socketId, RTCIceCandidate[]>
@@ -478,7 +509,11 @@ export default function MeetingRoom({
   };
 
   const handleTogglePanel = (panelName) => {
-    setActivePanel(prev => prev === panelName ? null : panelName);
+    setActivePanel(prev => {
+      const next = prev === panelName ? null : panelName;
+      if (next === 'chat') setUnreadChatCount(0);
+      return next;
+    });
   };
 
   const handleToggleHand = () => {
@@ -584,6 +619,7 @@ export default function MeetingRoom({
           <ChatPanel 
             socket={socket} 
             roomId={roomData.roomId} 
+            messages={chatMessages}
             currentUser={{ name: roomData.userName, id: socket?.id }}
             participants={participants}
             onClose={() => setActivePanel(null)}
@@ -607,6 +643,7 @@ export default function MeetingRoom({
         screenOn={screenOn}
         activePanel={activePanel}
         handRaised={handRaised}
+        unreadChatCount={unreadChatCount}
         isRecording={isRecording}
         isE2EE={isE2EE}
         isLocked={isLocked}

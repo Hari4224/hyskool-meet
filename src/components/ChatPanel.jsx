@@ -1,33 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Code, Paperclip, Smile, X, Lock, User } from 'lucide-react';
+import { Send, Code, X } from 'lucide-react';
 
-export default function ChatPanel({ socket, roomId, currentUser, participants = [], onClose }) {
-  const [messages, setMessages] = useState([
-    {
-      id: 'welcome-1',
-      senderName: 'HYSKOOL System',
-      text: 'Welcome to HYSKOOL MEET! Messaging is end-to-end encrypted and self-hosted.',
-      timestamp: '12:00 PM',
-      isSystem: true
-    }
-  ]);
+export default function ChatPanel({ socket, roomId, messages = [], currentUser, participants = [], onClose }) {
   const [inputText, setInputText] = useState('');
   const [selectedTargetUser, setSelectedTargetUser] = useState('');
   const [isCodeMode, setIsCodeMode] = useState(false);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    socket.on('chat-message', (msgData) => {
-      setMessages(prev => [...prev, msgData]);
-    });
-
-    return () => {
-      socket.off('chat-message');
-    };
-  }, [socket]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
