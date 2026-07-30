@@ -193,12 +193,13 @@ io.on('connection', (socket) => {
     room.participants.set(socket.id, currentUser);
     socket.join(roomId);
 
+    const allParticipantsList = Array.from(room.participants.values());
+
     // Notify user of room state
-    const existingParticipants = Array.from(room.participants.values()).filter(p => p.id !== socket.id);
     socket.emit('room-joined', {
       roomId,
       user: currentUser,
-      participants: Array.from(room.participants.values()),
+      participants: allParticipantsList,
       whiteboardElements: room.whiteboardElements,
       sharedNotes: room.sharedNotes,
       polls: room.polls,
@@ -207,13 +208,13 @@ io.on('connection', (socket) => {
       isE2EE: room.e2ee
     });
 
-    // Notify other peers in the room
+    // Notify other peers in the room with updated participant list
     socket.to(roomId).emit('user-connected', {
       user: currentUser,
-      participants: Array.from(room.participants.values())
+      participants: allParticipantsList
     });
 
-    console.log(`[User Joined] ${currentUser.name} -> Room: ${roomId}`);
+    console.log(`[User Joined] ${currentUser.name} (${socket.id}) -> Room: ${roomId} (Total: ${allParticipantsList.length})`);
   });
 
   // WebRTC Peer-to-Peer Signaling Relay

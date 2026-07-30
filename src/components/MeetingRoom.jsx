@@ -69,7 +69,7 @@ export default function MeetingRoom({
   // ICE Candidate Queues: Map<socketId, RTCIceCandidate[]>
   const iceCandidatesQueue = useRef(new Map());
 
-  // 1. Initialize Local HD Media Stream (Mic & Camera) BEFORE signaling
+  // 1. Initialize Local HD Media Stream (Mic & Camera) FIRST
   useEffect(() => {
     let currentStream = null;
 
@@ -138,18 +138,18 @@ export default function MeetingRoom({
     };
   }, [videoQuality]);
 
-  // 2. WebRTC PeerConnection Lifecycle & Socket Signaling Engine
+  // 2. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Deterministically Handles 3+ Participants)
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !localStream) return;
 
-    // Join Socket Room
+    // Join Socket Room once local media is ready
     socket.emit('join-room', {
       roomId: roomData.roomId,
       userName: roomData.userName,
       userRole: roomData.userRole
     });
 
-    // Helper: Create RTCPeerConnection for a target peer with guaranteed Audio Transceivers
+    // Helper: Create RTCPeerConnection for a target peer
     const createPeerConnection = (targetId, isInitiator) => {
       if (peerConnections.current.has(targetId)) {
         return peerConnections.current.get(targetId);
@@ -159,26 +159,10 @@ export default function MeetingRoom({
       const pc = new RTCPeerConnection(ICE_SERVERS);
       peerConnections.current.set(targetId, pc);
 
-      // GUARANTEE Bidirectional Audio & Video Transceivers in SDP
-      try {
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
-        pc.addTransceiver('video', { direction: 'sendrecv' });
-      } catch (e) {
-        console.warn('Transceiver addition notice:', e);
-      }
-
-      // Add local media tracks to PeerConnection if available
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          const senders = pc.getSenders();
-          const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
-          if (existingSender) {
-            existingSender.replaceTrack(track);
-          } else {
-            pc.addTrack(track, localStream);
-          }
-        });
-      }
+      // Add local media tracks (Audio & Video) to PeerConnection
+      localStream.getTracks().forEach((track) => {
+        pc.addTrack(track, localStream);
+      });
 
       // Handle ICE Candidates
       pc.onicecandidate = (event) => {
@@ -192,7 +176,7 @@ export default function MeetingRoom({
 
       // Handle Connection State Changes (Auto-reconnect on failure)
       pc.onconnectionstatechange = () => {
-        console.log(`[WebRTC Connection State] ${targetId}: ${pc.connectionState}`);
+        console.log(`[WebRTC Connection State] Peer ${targetId}: ${pc.connectionState}`);
         if (pc.connectionState === 'failed') {
           pc.restartIce();
         }
@@ -225,7 +209,7 @@ export default function MeetingRoom({
         audioTest.play().catch(() => setAudioBlocked(true));
       };
 
-      // If Initiator: Create Offer with forced audio/video SDP
+      // If Initiator: Create Offer with explicit audio/video SDP
       if (isInitiator) {
         pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
           .then((offer) => pc.setLocalDescription(offer))
@@ -241,25 +225,28 @@ export default function MeetingRoom({
       return pc;
     };
 
-    // Socket Event: Room Joined
+    // Socket Event: Room Joined (Current client receives list of all participants in room)
     socket.on('room-joined', (data) => {
-      const existingPeers = data.participants.filter(p => p.id !== socket.id);
-      setParticipants(existingPeers);
+      const allPeers = data.participants.filter(p => p.id !== socket.id);
+      setParticipants(allPeers);
       if (data.whiteboardElements) setWhiteboardElements(data.whiteboardElements);
       if (data.sharedNotes) setSharedNotes(data.sharedNotes);
       if (data.polls) setPolls(data.polls);
       setIsLocked(!!data.isLocked);
       setIsE2EE(!!data.isE2EE);
 
-      // Create Peer Connections as initiator for existing peers in room
-      existingPeers.forEach((peer) => {
+      // Joiner initiates WebRTC offers to all existing peers in the room
+      allPeers.forEach((peer) => {
         createPeerConnection(peer.id, true);
       });
     });
 
-    // Socket Event: User Connected
+    // Socket Event: User Connected (Fired on existing clients when a new peer joins)
     socket.on('user-connected', ({ user, participants: allParticipants }) => {
-      setParticipants(allParticipants.filter(p => p.id !== socket.id));
+      const currentRemotePeers = allParticipants.filter(p => p.id !== socket.id);
+      setParticipants(currentRemotePeers);
+
+      // Existing peers wait for the new user's offer (isInitiator = false)
       createPeerConnection(user.id, false);
     });
 
