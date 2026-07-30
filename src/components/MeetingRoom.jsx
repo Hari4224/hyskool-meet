@@ -198,20 +198,30 @@ export default function MeetingRoom({
         }
       };
 
-      // Handle Remote Audio/Video Tracks
+      // Handle Remote Audio & Video Tracks Aggregation
       pc.ontrack = (event) => {
-        console.log(`[WebRTC Track Received] Kind: ${event.track.kind} From ${targetId}:`, event.streams[0]);
-        const remoteStream = event.streams[0] || new MediaStream([event.track]);
+        console.log(`[WebRTC Track Received] Kind: ${event.track.kind} From ${targetId}`);
         
         setRemoteStreams(prev => {
           const updated = new Map(prev);
-          updated.set(targetId, remoteStream);
+          let peerStream = updated.get(targetId);
+
+          if (!peerStream) {
+            peerStream = event.streams[0] ? new MediaStream(event.streams[0].getTracks()) : new MediaStream();
+          }
+
+          if (!peerStream.getTracks().some(t => t.id === event.track.id)) {
+            peerStream.addTrack(event.track);
+          }
+
+          // Force new MediaStream reference with all accumulated audio and video tracks
+          updated.set(targetId, new MediaStream(peerStream.getTracks()));
           return updated;
         });
 
-        // Test browser autoplay policy
+        // Test browser audio playback
         const audioTest = new Audio();
-        audioTest.srcObject = remoteStream;
+        audioTest.srcObject = event.streams[0] || new MediaStream([event.track]);
         audioTest.play().catch(() => setAudioBlocked(true));
       };
 

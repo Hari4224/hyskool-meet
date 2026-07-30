@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Mic, MicOff, Shield, Hand, Sparkles } from 'lucide-react';
 
 function RemoteParticipantTile({ participant, stream }) {
@@ -7,7 +7,7 @@ function RemoteParticipantTile({ participant, stream }) {
       if (videoEl.srcObject !== stream) {
         videoEl.srcObject = stream;
       }
-      videoEl.play().catch(err => console.warn('Remote video playback error:', err));
+      videoEl.play().catch(err => console.warn('Remote video playback notice:', err));
     }
   };
 
@@ -16,7 +16,8 @@ function RemoteParticipantTile({ participant, stream }) {
       if (audioEl.srcObject !== stream) {
         audioEl.srcObject = stream;
       }
-      audioEl.play().catch(err => console.warn('Remote audio playback error:', err));
+      audioEl.volume = 1.0;
+      audioEl.play().catch(err => console.warn('Remote audio playback notice:', err));
     }
   };
 
@@ -36,7 +37,7 @@ function RemoteParticipantTile({ participant, stream }) {
         </div>
       )}
 
-      {/* Hidden audio element guarantee for remote audio */}
+      {/* Dedicated audio element for remote participant voice audio stream */}
       {stream && (
         <audio 
           ref={audioCallbackRef}
@@ -45,9 +46,9 @@ function RemoteParticipantTile({ participant, stream }) {
       )}
 
       <div className="gmeet-name-pill">
-        {participant.audioMuted ? <MicOff size={14} color="#ea4335" /> : <Mic size={14} color="#059669" />}
+        {participant.audioMuted ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#059669" />}
         <span>{participant.name}</span>
-        {participant.handRaised && <Hand size={14} color="#fbbc04" />}
+        {participant.handRaised && <Hand size={14} color="#f59e0b" />}
       </div>
     </div>
   );
@@ -108,7 +109,7 @@ export default function VideoGrid({
                 </div>
               )}
               <div className="gmeet-name-pill">
-                {localUser?.audioMuted ? <MicOff size={14} color="#ea4335" /> : <Mic size={14} color="#059669" />}
+                {localUser?.audioMuted ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#059669" />}
                 <span>You</span>
               </div>
             </div>
@@ -136,9 +137,9 @@ export default function VideoGrid({
             )}
 
             <div className="gmeet-name-pill">
-              {localUser?.audioMuted ? <MicOff size={14} color="#ea4335" /> : <Mic size={14} color="#059669" />}
+              {localUser?.audioMuted ? <MicOff size={14} color="#ef4444" /> : <Mic size={14} color="#059669" />}
               <span>{localUser?.name || 'You'} (You)</span>
-              {localUser?.handRaised && <Hand size={14} color="#fbbc04" />}
+              {localUser?.handRaised && <Hand size={14} color="#f59e0b" />}
               {isE2EE && <Shield size={12} color="#0284c7" title="E2EE Encrypted" />}
             </div>
           </div>
