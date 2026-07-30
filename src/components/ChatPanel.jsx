@@ -12,9 +12,10 @@ export default function ChatPanel({ socket, roomId, currentUser, participants = 
     }
   ]);
   const [inputText, setInputText] = useState('');
-  const [selectedTargetUser, setSelectedTargetUser] = useState(''); // empty for group, userId for direct msg
+  const [selectedTargetUser, setSelectedTargetUser] = useState('');
   const [isCodeMode, setIsCodeMode] = useState(false);
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     if (!socket) return;
@@ -33,7 +34,7 @@ export default function ChatPanel({ socket, roomId, currentUser, participants = 
   }, [messages]);
 
   const handleSend = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!inputText.trim()) return;
 
     if (socket) {
@@ -47,6 +48,13 @@ export default function ChatPanel({ socket, roomId, currentUser, participants = 
     setInputText('');
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
     <div className="sidebar-panel">
       <div className="panel-header">
@@ -57,7 +65,7 @@ export default function ChatPanel({ socket, roomId, currentUser, participants = 
       </div>
 
       {/* Target Recipient Selector */}
-      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--glass-border)', background: 'rgba(0,0,0,0.2)' }}>
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--glass-border)', background: '#f8fafc' }}>
         <select 
           className="form-input"
           style={{ padding: '6px 10px', fontSize: '0.8rem' }}
@@ -79,12 +87,13 @@ export default function ChatPanel({ socket, roomId, currentUser, participants = 
             style={{
               padding: '10px 12px',
               borderRadius: 'var(--radius-sm)',
-              background: msg.isSystem ? 'rgba(6, 182, 212, 0.1)' : msg.isPrivate ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-              border: msg.isPrivate ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid var(--glass-border)'
+              background: msg.isSystem ? 'rgba(2, 132, 199, 0.08)' : msg.isPrivate ? 'rgba(99, 102, 241, 0.1)' : '#ffffff',
+              border: msg.isPrivate ? '1px solid rgba(99, 102, 241, 0.25)' : '1px solid var(--glass-border)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: '0.75rem' }}>
-              <span style={{ fontWeight: 700, color: msg.isSystem ? '#38bdf8' : '#c084fc' }}>
+              <span style={{ fontWeight: 700, color: msg.isSystem ? '#0284c7' : '#4f46e5' }}>
                 {msg.senderName} {msg.isPrivate && '(Private)'}
               </span>
               <span style={{ color: 'var(--text-dim)' }}>{msg.timestamp}</span>
@@ -93,7 +102,7 @@ export default function ChatPanel({ socket, roomId, currentUser, participants = 
             {msg.isCode ? (
               <pre className="code-block" style={{ margin: 0, padding: 8 }}>{msg.text}</pre>
             ) : (
-              <p style={{ fontSize: '0.875rem', lineHeight: '1.4' }}>{msg.text}</p>
+              <p style={{ fontSize: '0.875rem', lineHeight: '1.4', color: '#0f172a', whiteSpace: 'pre-wrap' }}>{msg.text}</p>
             )}
           </div>
         ))}
@@ -101,28 +110,31 @@ export default function ChatPanel({ socket, roomId, currentUser, participants = 
       </div>
 
       {/* Input box */}
-      <form onSubmit={handleSend} style={{ padding: 12, borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <form onSubmit={handleSend} style={{ padding: 12, borderTop: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: 8, background: '#ffffff' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button 
             type="button" 
             className={`btn btn-secondary ${isCodeMode ? 'btn-primary' : ''}`}
-            style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+            style={{ padding: '4px 10px', fontSize: '0.75rem' }}
             onClick={() => setIsCodeMode(!isCodeMode)}
             title="Toggle Code Formatting"
           >
-            <Code size={14} /> Code
+            <Code size={14} /> Code Snippet Mode
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input 
-            type="text" 
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <textarea 
+            ref={textareaRef}
+            rows={isCodeMode ? 3 : 1}
             className="form-input" 
-            placeholder={isCodeMode ? "Paste code snippet..." : "Type message..."}
+            placeholder={isCodeMode ? "Paste code snippet... (Enter to send)" : "Type message... (Enter to send, Shift+Enter for new line)"}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={{ resize: 'none', fontFamily: isCodeMode ? 'var(--font-mono)' : 'var(--font-sans)', fontSize: '0.85rem' }}
           />
-          <button type="submit" className="btn btn-primary" style={{ padding: '0 16px' }}>
+          <button type="submit" className="btn btn-primary" style={{ padding: '10px 16px', height: 'fit-content' }}>
             <Send size={16} />
           </button>
         </div>
