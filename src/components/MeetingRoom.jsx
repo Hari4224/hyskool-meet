@@ -281,6 +281,7 @@ export default function MeetingRoom({
     socket.on('room-joined', (data) => {
       const allPeers = data.participants.filter(p => p.id !== socket.id);
       setParticipants(allPeers);
+      if (data.chatHistory && data.chatHistory.length > 0) setChatMessages(data.chatHistory);
       if (data.whiteboardElements) setWhiteboardElements(data.whiteboardElements);
       if (data.sharedNotes) setSharedNotes(data.sharedNotes);
       if (data.polls) setPolls(data.polls);

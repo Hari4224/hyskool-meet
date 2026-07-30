@@ -169,6 +169,7 @@ io.on('connection', (socket) => {
         polls: [],
         whiteboardElements: [],
         sharedNotes: '# HYSKOOL MEET Collaborative Notes\n\n- Welcome to the meeting!\n- Use this space to collaborate in real-time.',
+        chatHistory: [],
         breakoutRooms: []
       });
     }
@@ -195,7 +196,7 @@ io.on('connection', (socket) => {
 
     const allParticipantsList = Array.from(room.participants.values());
 
-    // Notify user of room state
+    // Notify user of room state (Including Chat History for Late-Joiners)
     socket.emit('room-joined', {
       roomId,
       user: currentUser,
@@ -203,6 +204,7 @@ io.on('connection', (socket) => {
       whiteboardElements: room.whiteboardElements,
       sharedNotes: room.sharedNotes,
       polls: room.polls,
+      chatHistory: room.chatHistory || [],
       breakoutRooms: room.breakoutRooms,
       isLocked: room.locked,
       isE2EE: room.e2ee
@@ -297,7 +299,9 @@ io.on('connection', (socket) => {
       io.to(targetUserId).emit('chat-message', chatData);
       socket.emit('chat-message', chatData);
     } else {
-      // Group chat
+      // Group chat - Save to room chat history for persistence
+      if (!room.chatHistory) room.chatHistory = [];
+      room.chatHistory.push(chatData);
       io.to(currentRoomId).emit('chat-message', chatData);
     }
   });
