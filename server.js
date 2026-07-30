@@ -225,6 +225,12 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Jitsi Meet Live Reaction Emojis Relay
+  socket.on('send-reaction', (reaction) => {
+    if (!currentRoomId) return;
+    socket.to(currentRoomId).emit('reaction-received', reaction);
+  });
+
   // Media Controls (Mic, Cam, Hand Raise) - Throttled for 100+ users
   socket.on('update-media-state', ({ audioMuted, videoMuted, handRaised }) => {
     if (!currentRoomId || !activeRooms.has(currentRoomId)) return;

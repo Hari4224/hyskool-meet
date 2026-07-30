@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, Shield, Hand, Sparkles, ChevronLeft, ChevronRight, Grid, Users } from 'lucide-react';
+import { Mic, MicOff, Shield, Hand, Sparkles, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 
 function RemoteParticipantTile({ participant, stream }) {
   const videoCallbackRef = (videoEl) => {
@@ -59,13 +59,14 @@ export default function VideoGrid({
   localUser, 
   participants = [], 
   remoteStreams = new Map(),
+  floatingReactions = [],
   screenStream, 
   isRecording, 
   isE2EE,
   videoQuality = '1080p'
 }) {
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 6; // Max 6 active video tiles per page for 100+ user scalability
+  const pageSize = 6;
 
   const localVideoCallbackRef = (videoEl) => {
     if (videoEl && localStream && !localUser?.videoMuted) {
@@ -92,11 +93,9 @@ export default function VideoGrid({
     return 0;
   });
 
-  const totalParticipantsCount = participants.length + 1; // Including Local User
+  const totalParticipantsCount = participants.length + 1;
   const totalPages = Math.ceil(totalParticipantsCount / pageSize);
 
-  // Calculate current page slice
-  // Page 1 holds Local User + first (pageSize - 1) remote participants
   const isPageOne = currentPage === 1;
   const startIndex = isPageOne ? 0 : (currentPage - 1) * pageSize - 1;
   const endIndex = isPageOne ? pageSize - 1 : startIndex + pageSize;
@@ -107,10 +106,33 @@ export default function VideoGrid({
 
   return (
     <div className="gmeet-video-section" style={{ flexDirection: 'column', position: 'relative' }}>
+      {/* Jitsi Meet Floating Particle Reactions Overlay */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 50, overflow: 'hidden' }}>
+        {floatingReactions.map((r, idx) => (
+          <div 
+            key={r.id}
+            style={{
+              position: 'absolute',
+              bottom: '40px',
+              left: `${15 + (idx % 6) * 14}%`,
+              fontSize: '2.5rem',
+              animation: 'floatUp 3s ease-out forwards',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center'
+            }}
+          >
+            <span>{r.emoji}</span>
+            <span style={{ fontSize: '0.7rem', color: '#0f172a', background: 'rgba(255,255,255,0.9)', padding: '2px 6px', borderRadius: 10, fontWeight: 700 }}>
+              {r.senderName}
+            </span>
+          </div>
+        ))}
+      </div>
+
       {/* Screen Share Stage Spotlight if active */}
       {screenStream ? (
         <div style={{ display: 'flex', gap: 16, width: '100%', height: '100%' }}>
-          {/* Main Stage Screen Share */}
           <div className="gmeet-tile" style={{ flex: 3 }}>
             <video ref={screenVideoCallbackRef} autoPlay playsInline className="gmeet-video" style={{ objectFit: 'contain', background: '#000' }} />
             <div className="gmeet-name-pill">
@@ -118,7 +140,6 @@ export default function VideoGrid({
             </div>
           </div>
 
-          {/* Right strip for participants */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
             <div className="gmeet-tile" style={{ minHeight: '160px' }}>
               {localStream && !localUser?.videoMuted ? (
@@ -146,7 +167,6 @@ export default function VideoGrid({
       ) : (
         /* Standard Google Meet Dynamic Full Screen Grid */
         <div className={`gmeet-grid ${gridClass}`} style={{ flex: 1 }}>
-          {/* Local Participant Card (Rendered on Page 1) */}
           {isPageOne && (
             <div className={`gmeet-tile ${!localUser?.audioMuted ? 'speaking' : ''}`}>
               {localStream && !localUser?.videoMuted ? (
@@ -166,7 +186,6 @@ export default function VideoGrid({
             </div>
           )}
 
-          {/* Remote Participants for current page */}
           {visibleRemoteParticipants.map((participant) => (
             <RemoteParticipantTile 
               key={participant.id} 

@@ -63,6 +63,20 @@ export default function MeetingRoom({
   const [whiteboardElements, setWhiteboardElements] = useState([]);
   const [sharedNotes, setSharedNotes] = useState('');
   const [polls, setPolls] = useState([]);
+  const [floatingReactions, setFloatingReactions] = useState([]);
+
+  const handleSendReaction = (emoji) => {
+    const reaction = {
+      id: `react-${Date.now()}-${Math.random()}`,
+      emoji,
+      senderName: roomData.userName
+    };
+    setFloatingReactions(prev => [...prev, reaction]);
+    if (socket) socket.emit('send-reaction', reaction);
+    setTimeout(() => {
+      setFloatingReactions(prev => prev.filter(r => r.id !== reaction.id));
+    }, 3500);
+  };
 
   // PeerConnections Ref: Map<socketId, RTCPeerConnection>
   const peerConnections = useRef(new Map());
@@ -322,9 +336,16 @@ export default function MeetingRoom({
       }
     });
 
-    // Auxiliary Real-Time Socket Events
+    // Socket event: Media state changes
     socket.on('media-state-changed', ({ participants: updatedParticipants }) => {
       setParticipants(updatedParticipants.filter(p => p.id !== socket.id));
+    });
+
+    socket.on('reaction-received', (reaction) => {
+      setFloatingReactions(prev => [...prev, reaction]);
+      setTimeout(() => {
+        setFloatingReactions(prev => prev.filter(r => r.id !== reaction.id));
+      }, 3500);
     });
 
     socket.on('poll-created', (newPoll) => {
@@ -551,6 +572,7 @@ export default function MeetingRoom({
           participants={participants}
           remoteStreams={remoteStreams}
           screenStream={screenStream}
+          floatingReactions={floatingReactions}
           isRecording={isRecording}
           isE2EE={isE2EE}
           videoQuality={videoQuality}
@@ -601,6 +623,7 @@ export default function MeetingRoom({
         onToggleRecording={handleToggleRecording}
         onToggleE2EE={handleToggleE2EE}
         onToggleLock={handleToggleLock}
+        onSendReaction={handleSendReaction}
         onOpenIntegrationModal={onOpenIntegrationModal}
         onLeaveMeeting={onLeaveMeeting}
       />
