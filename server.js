@@ -143,7 +143,8 @@ io.on('connection', (socket) => {
   let currentUser = null;
 
   socket.on('join-room', ({ roomId, userName, userRole, avatar, password }) => {
-    currentRoomId = roomId;
+    const cleanRoomId = (roomId || 'main-room').toString().trim().toLowerCase().replace(/\s+/g, '-');
+    currentRoomId = cleanRoomId;
     currentUser = {
       id: socket.id,
       name: userName || `User-${socket.id.substring(0, 4)}`,
@@ -155,10 +156,10 @@ io.on('connection', (socket) => {
       joinedAt: new Date().toLocaleTimeString()
     };
 
-    if (!activeRooms.has(roomId)) {
-      activeRooms.set(roomId, {
-        id: roomId,
-        title: `Room ${roomId}`,
+    if (!activeRooms.has(cleanRoomId)) {
+      activeRooms.set(cleanRoomId, {
+        id: cleanRoomId,
+        title: `Room ${cleanRoomId}`,
         host: currentUser.name,
         created: new Date().toISOString(),
         locked: false,
@@ -174,7 +175,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    const room = activeRooms.get(roomId);
+    const room = activeRooms.get(cleanRoomId);
 
     // Handle locked room / lobby
     if (room.locked && currentUser.role !== 'host') {
@@ -192,13 +193,13 @@ io.on('connection', (socket) => {
 
     // Add to room
     room.participants.set(socket.id, currentUser);
-    socket.join(roomId);
+    socket.join(cleanRoomId);
 
     const allParticipantsList = Array.from(room.participants.values());
 
     // Notify user of room state (Including Chat History for Late-Joiners)
     socket.emit('room-joined', {
-      roomId,
+      roomId: cleanRoomId,
       user: currentUser,
       participants: allParticipantsList,
       whiteboardElements: room.whiteboardElements,
@@ -211,12 +212,12 @@ io.on('connection', (socket) => {
     });
 
     // Notify other peers in the room with updated participant list
-    socket.to(roomId).emit('user-connected', {
+    socket.to(cleanRoomId).emit('user-connected', {
       user: currentUser,
       participants: allParticipantsList
     });
 
-    console.log(`[User Joined] ${currentUser.name} (${socket.id}) -> Room: ${roomId} (Total: ${allParticipantsList.length})`);
+    console.log(`[User Joined] ${currentUser.name} (${socket.id}) -> Room: ${cleanRoomId} (Total: ${allParticipantsList.length})`);
   });
 
   // WebRTC Peer-to-Peer Signaling Relay

@@ -38,7 +38,13 @@ export default function App() {
   }, []);
 
   const handleJoinRoom = (roomData) => {
-    setCurrentRoom(roomData);
+    const cleanRoomId = (roomData.roomId || 'main-room').toString().trim().toLowerCase().replace(/\s+/g, '-');
+    const updatedRoomData = { ...roomData, roomId: cleanRoomId };
+    setCurrentRoom(updatedRoomData);
+
+    // Sync browser URL so room link can be copied and shared
+    const newUrl = `${window.location.pathname}?room=${encodeURIComponent(cleanRoomId)}`;
+    window.history.pushState({}, '', newUrl);
   };
 
   const handleLeaveMeeting = () => {
