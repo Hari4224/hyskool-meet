@@ -8,7 +8,7 @@ import SIPDialerModal from './SIPDialerModal';
 import SharedNotes from './SharedNotes';
 import IntegrationModal from './IntegrationModal';
 
-import { Shield, Lock, Users, Radio, Sparkles, Volume2, Mic, Settings } from 'lucide-react';
+import { Shield, Lock, Users, Radio, Sparkles, Volume2 } from 'lucide-react';
 
 // Enterprise-Grade ICE Servers (STUN & TURN Relays for NAT/Firewall Traversal)
 const ICE_SERVERS = {
@@ -55,10 +55,6 @@ export default function MeetingRoom({
   const [activePanel, setActivePanel] = useState(null);
   const [videoQuality, setVideoQuality] = useState('1080p');
   const [audioBlocked, setAudioBlocked] = useState(false);
-
-  const [audioDevices, setAudioDevices] = useState([]);
-  const [selectedAudioDevice, setSelectedAudioDevice] = useState('');
-  const [micVolumeLevel, setMicVolumeLevel] = useState(0);
 
   const [localStream, setLocalStream] = useState(null);
   const localStreamRef = useRef(null);
@@ -121,35 +117,12 @@ export default function MeetingRoom({
     }, 3500);
   };
 
-  // Enumerate Microphone Input Devices for Laptop / PC users
-  useEffect(() => {
-    async function getDevices() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const inputs = devices.filter(d => d.kind === 'audioinput');
-        setAudioDevices(inputs);
-        if (inputs.length > 0 && !selectedAudioDevice) {
-          setSelectedAudioDevice(inputs[0].deviceId);
-        }
-      } catch (err) {
-        console.warn('Enumerate devices warning:', err);
-      }
-    }
-    getDevices();
-  }, []);
-
-  // 1. Initialize Local HD Media Stream ONCE on mount (Cross-Device Compatible for Windows, Android, iOS)
+  // 1. Initialize Local HD Media Stream ONCE on mount
   useEffect(() => {
     let currentStream = null;
-    let audioContext = null;
-    let animId = null;
 
     async function initMedia() {
       try {
-        const audioConstraint = selectedAudioDevice 
-          ? { deviceId: { exact: selectedAudioDevice } }
-          : { echoCancellation: { ideal: true }, autoGainControl: { ideal: true } };
-
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             width: { ideal: 1920, min: 1280 },
@@ -157,41 +130,17 @@ export default function MeetingRoom({
             frameRate: { ideal: 30, max: 60 },
             facingMode: 'user'
           },
-          audio: audioConstraint
+          audio: {
+            echoCancellation: true,
+            autoGainControl: true
+          }
         });
 
-        // Force enable all audio tracks
         stream.getAudioTracks().forEach(t => { t.enabled = true; });
 
         currentStream = stream;
         setLocalStream(stream);
         localStreamRef.current = stream;
-
-        // Setup Web Audio Mic Volume Meter to verify microphone input on laptop
-        if (stream.getAudioTracks().length > 0) {
-          try {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaStreamSource(stream);
-            const analyser = audioContext.createAnalyser();
-            analyser.fftSize = 64;
-            source.connect(analyser);
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-            const checkVolume = () => {
-              analyser.getByteFrequencyData(dataArray);
-              let sum = 0;
-              for (let i = 0; i < dataArray.length; i++) {
-                sum += dataArray[i];
-              }
-              const average = sum / dataArray.length;
-              setMicVolumeLevel(Math.min(100, Math.round((average / 128) * 100)));
-              animId = requestAnimationFrame(checkVolume);
-            };
-            checkVolume();
-          } catch (e) {
-            console.warn('AudioAnalyser warning:', e);
-          }
-        }
 
       } catch (err) {
         console.warn('HD camera fallback to standard constraints:', err);
@@ -220,13 +169,11 @@ export default function MeetingRoom({
 
     return () => {
       window.removeEventListener('click', handleGlobalClick);
-      if (animId) cancelAnimationFrame(animId);
-      if (audioContext) audioContext.close().catch(() => {});
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [selectedAudioDevice]);
+  }, []);
 
   // 2. Dynamic Video Quality Constraint Adjuster
   useEffect(() => {
@@ -243,7 +190,7 @@ export default function MeetingRoom({
     }
   }, [videoQuality, localStream]);
 
-  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Cross-Platform Audio Transceivers)
+  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine
   useEffect(() => {
     if (!socket) return;
 
@@ -254,7 +201,7 @@ export default function MeetingRoom({
       userRole: roomData.userRole
     });
 
-    // Helper: Create RTCPeerConnection for a target peer with clean single-transceiver SDP binding
+    // Helper: Create RTCPeerConnection for a target peer
     const createPeerConnection = (targetId, isInitiator) => {
       if (peerConnections.current.has(targetId)) {
         return peerConnections.current.get(targetId);
@@ -270,22 +217,16 @@ export default function MeetingRoom({
       const pc = new RTCPeerConnection(ICE_SERVERS);
       peerConnections.current.set(targetId, pc);
 
+      // Add local media tracks cleanly using standard pc.addTrack
       const activeStream = localStreamRef.current || localStream;
-
-      // Clean single transceiver binding per track (Fixes Windows Chrome & Android Chrome audio muting)
-      if (activeStream && activeStream.getTracks().length > 0) {
+      if (activeStream) {
         activeStream.getTracks().forEach((track) => {
           try {
-            pc.addTransceiver(track, { direction: 'sendrecv', streams: [activeStream] });
-          } catch (e) {
             pc.addTrack(track, activeStream);
+          } catch (e) {
+            console.warn('addTrack warning:', e);
           }
         });
-      } else {
-        try {
-          pc.addTransceiver('audio', { direction: 'sendrecv' });
-          pc.addTransceiver('video', { direction: 'sendrecv' });
-        } catch (e) {}
       }
 
       // Handle ICE Candidates
@@ -401,6 +342,20 @@ export default function MeetingRoom({
       try {
         if (signal.type === 'offer') {
           await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+
+          // Ensure local tracks are attached before creating answer
+          const activeStream = localStreamRef.current || localStream;
+          if (activeStream) {
+            const senders = pc.getSenders();
+            activeStream.getTracks().forEach((track) => {
+              const sender = senders.find(s => s.track && s.track.kind === track.kind);
+              if (sender) {
+                sender.replaceTrack(track);
+              } else {
+                pc.addTrack(track, activeStream);
+              }
+            });
+          }
           
           if (iceCandidatesQueue.current.has(senderId)) {
             const queue = iceCandidatesQueue.current.get(senderId);
@@ -410,7 +365,7 @@ export default function MeetingRoom({
             iceCandidatesQueue.current.delete(senderId);
           }
 
-          const answer = await pc.createAnswer();
+          const answer = await pc.createAnswer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
           await pc.setLocalDescription(answer);
 
           socket.emit('signal', {
@@ -514,9 +469,9 @@ export default function MeetingRoom({
           sender.replaceTrack(track);
         } else {
           try {
-            pc.addTransceiver(track, { direction: 'sendrecv', streams: [localStream] });
-          } catch (e) {
             pc.addTrack(track, localStream);
+          } catch (e) {
+            console.warn('addTrack warning:', e);
           }
           if (pc.signalingState === 'stable') {
             pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
@@ -732,40 +687,6 @@ export default function MeetingRoom({
 
         {/* Top Header Controls & Status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* Live Mic Volume Visualizer Meter for Laptop / PC Users */}
-          {micOn && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(5, 150, 105, 0.1)', padding: '4px 10px', borderRadius: 12, border: '1px solid rgba(5, 150, 105, 0.2)' }}>
-              <Mic size={14} color="#059669" />
-              <div style={{ width: 40, height: 6, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ width: `${micVolumeLevel}%`, height: '100%', background: '#059669', transition: 'width 0.1s ease' }} />
-              </div>
-            </div>
-          )}
-
-          {/* Microphone Selector Dropdown for Laptop Users */}
-          {audioDevices.length > 1 && (
-            <select
-              value={selectedAudioDevice}
-              onChange={(e) => setSelectedAudioDevice(e.target.value)}
-              style={{
-                padding: '4px 8px',
-                fontSize: '0.75rem',
-                borderRadius: 8,
-                border: '1px solid var(--glass-border)',
-                background: 'white',
-                fontWeight: 600,
-                color: '#0f172a'
-              }}
-              title="Select Microphone Input"
-            >
-              {audioDevices.map(d => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Microphone ${d.deviceId.substring(0, 4)}`}
-                </option>
-              ))}
-            </select>
-          )}
-
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
             <Users size={14} style={{ display: 'inline', marginRight: 4 }} />
             {participants.length + 1} Connected
