@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Mic, MicOff, Shield, Hand, Sparkles, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Mic, MicOff, Shield, Hand, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 
 function RemoteParticipantTile({ participant, stream }) {
   const videoCallbackRef = (videoEl) => {
@@ -69,6 +69,7 @@ export default function VideoGrid({
   videoQuality = '1080p'
 }) {
   const [currentPage, setCurrentPage] = useState(1);
+  const touchStartX = useRef(0);
   const pageSize = 9; // Up to 9 active video tiles per page (fits 5 to 9 people on 1 screen)
 
   const localVideoCallbackRef = (videoEl) => {
@@ -89,7 +90,7 @@ export default function VideoGrid({
     }
   };
 
-  // Sort active speakers first for 100+ user rooms
+  // Sort active speakers & hand raises first for 10+ user rooms
   const sortedParticipants = [...participants].sort((a, b) => {
     if (a.handRaised && !b.handRaised) return -1;
     if (!a.audioMuted && b.audioMuted) return -1;
@@ -114,8 +115,51 @@ export default function VideoGrid({
     : (displayCount >= 7 && displayCount <= 9) ? 'count-9' 
     : 'count-many';
 
+  // Touch Swipe Gesture Handlers (Left/Right swipe for mobile/tablet)
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    if (deltaX < -50 && currentPage < totalPages) {
+      // Swiped Left -> Next Page
+      setCurrentPage(prev => prev + 1);
+    } else if (deltaX > 50 && currentPage > 1) {
+      // Swiped Right -> Previous Page
+      setCurrentPage(prev => prev - 1);
+    }
+  };
+
   return (
-    <div className="gmeet-video-section" style={{ flexDirection: 'column', position: 'relative' }}>
+    <div 
+      className="gmeet-video-section" 
+      style={{ flexDirection: 'column', position: 'relative' }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Zoom-Style Left Floating Side Slider Arrow */}
+      {totalPages > 1 && currentPage > 1 && (
+        <button 
+          className="zoom-slider-arrow left"
+          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+          title="Previous Participant Page"
+        >
+          <ChevronLeft size={24} />
+        </button>
+      )}
+
+      {/* Zoom-Style Right Floating Side Slider Arrow */}
+      {totalPages > 1 && currentPage < totalPages && (
+        <button 
+          className="zoom-slider-arrow right"
+          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+          title="Next Participant Page"
+        >
+          <ChevronRight size={24} />
+        </button>
+      )}
+
       {/* Screen Share Stage Spotlight if active */}
       {screenStream ? (
         <div style={{ display: 'flex', gap: 16, width: '100%', height: '100%' }}>
@@ -182,43 +226,49 @@ export default function VideoGrid({
         </div>
       )}
 
-      {/* 100+ User Scale Pagination Controls Bar */}
+      {/* Zoom-Style Carousel Page Slider Dots & Counter Bar (10+, 20+, 50+ users) */}
       {totalPages > 1 && (
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: 16,
           background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(12px)',
-          padding: '8px 20px',
+          backdropFilter: 'blur(16px)',
+          padding: '8px 22px',
           borderRadius: 'var(--radius-full)',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.1)',
           border: '1px solid var(--glass-border)',
           marginTop: 12,
           zIndex: 10
         }}>
-          <button 
-            className="btn btn-secondary" 
-            style={{ padding: '4px 10px', borderRadius: '50%', width: 32, height: 32 }}
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-          >
-            <ChevronLeft size={16} />
-          </button>
+          {/* Zoom Carousel Dots */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {Array.from({ length: totalPages }).map((_, idx) => {
+              const pageNum = idx + 1;
+              const isActive = pageNum === currentPage;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  style={{
+                    width: isActive ? 24 : 10,
+                    height: 10,
+                    borderRadius: 10,
+                    background: isActive ? '#0284c7' : '#cbd5e1',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+                  }}
+                  title={`Go to Page ${pageNum}`}
+                />
+              );
+            })}
+          </div>
 
           <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
             <Users size={14} style={{ display: 'inline', marginRight: 6, color: '#0284c7' }} />
             Page {currentPage} of {totalPages} ({totalParticipantsCount} Connected)
           </span>
-
-          <button 
-            className="btn btn-secondary" 
-            style={{ padding: '4px 10px', borderRadius: '50%', width: 32, height: 32 }}
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-          >
-            <ChevronRight size={16} />
-          </button>
         </div>
       )}
     </div>
