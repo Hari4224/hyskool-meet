@@ -106,30 +106,6 @@ export default function VideoGrid({
 
   return (
     <div className="gmeet-video-section" style={{ flexDirection: 'column', position: 'relative' }}>
-      {/* Jitsi Meet Floating Particle Reactions Overlay */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 50, overflow: 'hidden' }}>
-        {floatingReactions.map((r, idx) => (
-          <div 
-            key={r.id}
-            style={{
-              position: 'absolute',
-              bottom: '40px',
-              left: `${15 + (idx % 6) * 14}%`,
-              fontSize: '2.5rem',
-              animation: 'floatUp 3s ease-out forwards',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center'
-            }}
-          >
-            <span>{r.emoji}</span>
-            <span style={{ fontSize: '0.7rem', color: '#0f172a', background: 'rgba(255,255,255,0.9)', padding: '2px 6px', borderRadius: 10, fontWeight: 700 }}>
-              {r.senderName}
-            </span>
-          </div>
-        ))}
-      </div>
-
       {/* Screen Share Stage Spotlight if active */}
       {screenStream ? (
         <div style={{ display: 'flex', gap: 16, width: '100%', height: '100%' }}>

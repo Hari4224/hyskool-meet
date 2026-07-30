@@ -541,7 +541,32 @@ export default function MeetingRoom({
   };
 
   return (
-    <div className="meeting-workspace">
+    <div className="meeting-workspace" style={{ position: 'relative' }}>
+      {/* Global Floating Particle Reaction Emojis Overlay */}
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden' }}>
+        {floatingReactions.map((r, idx) => (
+          <div 
+            key={r.id}
+            style={{
+              position: 'absolute',
+              bottom: '110px',
+              left: `${20 + (idx % 5) * 15}%`,
+              fontSize: '3rem',
+              animation: 'floatUp 3.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.15))'
+            }}
+          >
+            <span>{r.emoji}</span>
+            <span style={{ fontSize: '0.75rem', color: '#0f172a', background: 'rgba(255,255,255,0.95)', padding: '3px 10px', borderRadius: 12, fontWeight: 700, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              {r.senderName}
+            </span>
+          </div>
+        ))}
+      </div>
+
       {/* Autoplay Audio Unlock Warning Banner */}
       {audioBlocked && (
         <div 
