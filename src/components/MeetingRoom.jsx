@@ -539,21 +539,8 @@ export default function MeetingRoom({
           {isLocked && <span className="badge badge-amber"><Lock size={12} /> Room Locked</span>}
         </div>
 
-        {/* Video High Definition Quality Control */}
+        {/* Top Header Controls & Status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f1f5f9', padding: '4px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--glass-border)' }}>
-            <Sparkles size={14} color="#0284c7" />
-            <select 
-              value={videoQuality}
-              onChange={(e) => setVideoQuality(e.target.value)}
-              style={{ background: 'transparent', color: 'var(--text-main)', border: 'none', fontSize: '0.8rem', fontWeight: 600, outline: 'none', cursor: 'pointer' }}
-            >
-              <option value="1080p" style={{ background: '#ffffff' }}>1080p Full HD</option>
-              <option value="720p" style={{ background: '#ffffff' }}>720p HD</option>
-              <option value="480p" style={{ background: '#ffffff' }}>480p Standard</option>
-            </select>
-          </div>
-
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
             <Users size={14} style={{ display: 'inline', marginRight: 4 }} />
             {participants.length + 1} Connected
