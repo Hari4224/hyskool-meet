@@ -18,6 +18,7 @@ const ICE_SERVERS = {
     { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun3.l.google.com:19302' },
     { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.cloudflare.com:3478' },
     { urls: 'stun:global.stun.twilio.com:3478' },
     {
       urls: 'turn:openrelay.metered.ca:80',
@@ -187,24 +188,23 @@ export default function MeetingRoom({
     }
   }, [videoQuality, localStream]);
 
-  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine (Immediate Room Join)
+  // 3. WebRTC PeerConnection Lifecycle & Socket Signaling Engine
   useEffect(() => {
     if (!socket) return;
 
-    // Join Socket Room immediately on mount so 3rd, 4th, and 100th participants join instantly
+    // Join Socket Room immediately on mount
     socket.emit('join-room', {
       roomId: roomData.roomId,
       userName: roomData.userName,
       userRole: roomData.userRole
     });
 
-    // Helper: Create RTCPeerConnection for a target peer
+    // Helper: Create RTCPeerConnection for a target peer with forced Audio & Video Transceivers
     const createPeerConnection = (targetId, isInitiator) => {
       if (peerConnections.current.has(targetId)) {
         return peerConnections.current.get(targetId);
       }
 
-      // Hard Cap Guard for WebRTC Connections Limit (Max 120 PeerConnections)
       const MAX_PEERS = 120;
       if (peerConnections.current.size >= MAX_PEERS) {
         console.warn(`[Scale Limit Guard] Reached max WebRTC peer connections limit (${MAX_PEERS}). Skipping WebRTC P2P for user ${targetId}.`);
@@ -215,11 +215,25 @@ export default function MeetingRoom({
       const pc = new RTCPeerConnection(ICE_SERVERS);
       peerConnections.current.set(targetId, pc);
 
+      // GUARANTEE Audio and Video Transceivers exist in SDP
+      try {
+        pc.addTransceiver('audio', { direction: 'sendrecv' });
+        pc.addTransceiver('video', { direction: 'sendrecv' });
+      } catch (e) {
+        console.warn('Transceiver notice:', e);
+      }
+
       // Add local media tracks (Audio & Video) to PeerConnection
       const activeStream = localStreamRef.current || localStream;
       if (activeStream) {
         activeStream.getTracks().forEach((track) => {
-          pc.addTrack(track, activeStream);
+          const senders = pc.getSenders();
+          const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+          if (existingSender) {
+            existingSender.replaceTrack(track);
+          } else {
+            pc.addTrack(track, activeStream);
+          }
         });
       }
 
@@ -250,14 +264,13 @@ export default function MeetingRoom({
           let peerStream = updated.get(targetId);
 
           if (!peerStream) {
-            peerStream = event.streams[0] ? new MediaStream(event.streams[0].getTracks()) : new MediaStream();
+            peerStream = event.streams[0] || new MediaStream();
           }
 
           if (!peerStream.getTracks().some(t => t.id === event.track.id)) {
             peerStream.addTrack(event.track);
           }
 
-          // Preserve MediaStream instance per remote peer to prevent audio playback resets
           updated.set(targetId, peerStream);
           return updated;
         });
@@ -442,7 +455,7 @@ export default function MeetingRoom({
   // 4. Sync local tracks to all active peer connections whenever localStream is acquired or updated
   useEffect(() => {
     if (!localStream) return;
-    peerConnections.current.forEach((pc) => {
+    peerConnections.current.forEach((pc, targetId) => {
       const senders = pc.getSenders();
       localStream.getTracks().forEach((track) => {
         const sender = senders.find(s => s.track && s.track.kind === track.kind);
@@ -450,10 +463,22 @@ export default function MeetingRoom({
           sender.replaceTrack(track);
         } else {
           pc.addTrack(track, localStream);
+          // Trigger renegotiation offer if connection is stable
+          if (pc.signalingState === 'stable') {
+            pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
+              .then(offer => pc.setLocalDescription(offer))
+              .then(() => {
+                socket.emit('signal', {
+                  targetId,
+                  signal: { type: 'offer', sdp: pc.localDescription }
+                });
+              })
+              .catch(err => console.warn('Renegotiation offer error:', err));
+          }
         }
       });
     });
-  }, [localStream]);
+  }, [localStream, socket]);
 
   // Mic Toggle
   const handleToggleMic = () => {
@@ -574,6 +599,26 @@ export default function MeetingRoom({
 
   return (
     <div className="meeting-workspace" style={{ position: 'relative' }}>
+      {/* Root-Level Hidden Audio Elements Guarantee for All Remote Participants */}
+      <div style={{ display: 'none' }}>
+        {Array.from(remoteStreams.entries()).map(([peerId, stream]) => (
+          <audio
+            key={peerId}
+            ref={(audioEl) => {
+              if (audioEl && stream) {
+                if (audioEl.srcObject !== stream) {
+                  audioEl.srcObject = stream;
+                  audioEl.volume = 1.0;
+                  audioEl.muted = false;
+                  audioEl.play().catch(err => console.warn('Root audio playback warning:', err));
+                }
+              }
+            }}
+            autoPlay
+          />
+        ))}
+      </div>
+
       {/* Global Floating Particle Reaction Emojis Overlay */}
       <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden' }}>
         {floatingReactions.map((r, idx) => (
