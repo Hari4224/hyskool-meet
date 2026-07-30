@@ -6,8 +6,8 @@ function RemoteParticipantTile({ participant, stream }) {
     if (videoEl && stream && !participant.videoMuted) {
       if (videoEl.srcObject !== stream) {
         videoEl.srcObject = stream;
+        videoEl.play().catch(err => console.warn('Remote video playback notice:', err));
       }
-      videoEl.play().catch(err => console.warn('Remote video playback notice:', err));
     }
   };
 
@@ -15,10 +15,10 @@ function RemoteParticipantTile({ participant, stream }) {
     if (audioEl && stream) {
       if (audioEl.srcObject !== stream) {
         audioEl.srcObject = stream;
+        audioEl.volume = 1.0;
+        audioEl.muted = false;
+        audioEl.play().catch(err => console.warn('Remote audio playback notice:', err));
       }
-      audioEl.volume = 1.0;
-      audioEl.muted = false;
-      audioEl.play().catch(err => console.warn('Remote audio playback notice:', err));
     }
   };
 
@@ -76,8 +76,8 @@ export default function VideoGrid({
     if (videoEl && localStream && !localUser?.videoMuted) {
       if (videoEl.srcObject !== localStream) {
         videoEl.srcObject = localStream;
+        videoEl.play().catch(() => {});
       }
-      videoEl.play().catch(() => {});
     }
   };
 
@@ -85,8 +85,8 @@ export default function VideoGrid({
     if (videoEl && screenStream) {
       if (videoEl.srcObject !== screenStream) {
         videoEl.srcObject = screenStream;
+        videoEl.play().catch(() => {});
       }
-      videoEl.play().catch(() => {});
     }
   };
 
@@ -123,10 +123,8 @@ export default function VideoGrid({
   const handleTouchEnd = (e) => {
     const deltaX = e.changedTouches[0].clientX - touchStartX.current;
     if (deltaX < -50 && currentPage < totalPages) {
-      // Swiped Left -> Next Page
       setCurrentPage(prev => prev + 1);
     } else if (deltaX > 50 && currentPage > 1) {
-      // Swiped Right -> Previous Page
       setCurrentPage(prev => prev - 1);
     }
   };

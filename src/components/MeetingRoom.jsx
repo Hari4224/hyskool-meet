@@ -257,8 +257,8 @@ export default function MeetingRoom({
             peerStream.addTrack(event.track);
           }
 
-          // Force new MediaStream reference with all accumulated audio and video tracks
-          updated.set(targetId, new MediaStream(peerStream.getTracks()));
+          // Preserve MediaStream instance per remote peer to prevent audio playback resets
+          updated.set(targetId, peerStream);
           return updated;
         });
 
