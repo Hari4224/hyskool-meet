@@ -420,9 +420,18 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`[Socket Disconnected] ID: ${socket.id}`);
     if (currentRoomId && activeRooms.has(currentRoomId)) {
-      const room = activeRooms.get(currentRoomId);
+      const leavingUserWasHost = currentUser && currentUser.role === 'host';
       room.participants.delete(socket.id);
       room.lobby.delete(socket.id);
+
+      if (room.participants.size > 0 && leavingUserWasHost) {
+        const firstRemaining = room.participants.values().next().value;
+        if (firstRemaining) {
+          firstRemaining.role = 'host';
+          room.host = firstRemaining.name;
+          console.log(`[Host Migrated] New Host: ${firstRemaining.name} in Room ${currentRoomId}`);
+        }
+      }
 
       io.to(currentRoomId).emit('user-disconnected', {
         userId: socket.id,
