@@ -39,65 +39,24 @@ export default function ControlBar({
   };
 
   return (
-    <div className="control-bar" style={{ position: 'relative' }}>
-      {/* Audio Toggle */}
-      <button 
-        type="button"
-        className={`control-btn ${micOn ? '' : 'off'}`} 
-        onClick={onToggleMic}
-        title={micOn ? 'Mute Microphone' : 'Unmute Microphone'}
-      >
-        {micOn ? <Mic size={20} /> : <MicOff size={20} />}
-      </button>
-
-      {/* Camera Toggle */}
-      <button 
-        type="button"
-        className={`control-btn ${camOn ? '' : 'off'}`} 
-        onClick={onToggleCam}
-        title={camOn ? 'Turn Off Camera' : 'Turn On Camera'}
-      >
-        {camOn ? <Video size={20} /> : <VideoOff size={20} />}
-      </button>
-
-      {/* Screen Share */}
-      <button 
-        type="button"
-        className={`control-btn ${screenOn ? 'active' : ''}`} 
-        onClick={onToggleScreen}
-        title="Share Screen"
-      >
-        <Monitor size={20} />
-      </button>
-
-      {/* Jitsi Meet Live Reaction Emojis */}
-      <button 
-        type="button"
-        className={`control-btn ${showEmojiMenu ? 'active' : ''}`} 
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowEmojiMenu(!showEmojiMenu);
-        }}
-        title="Send Reaction Emoji"
-      >
-        <Smile size={20} />
-      </button>
-
-      {/* Floating Emoji Picker Menu */}
+    <>
+      {/* Fixed Emoji Picker Menu (Position Fixed to escape parent overflow clipping) */}
       {showEmojiMenu && (
         <div 
           onClick={(e) => e.stopPropagation()}
           style={{
-            position: 'absolute',
-            bottom: '88px',
+            position: 'fixed',
+            bottom: '96px',
+            left: '50%',
+            transform: 'translateX(-50%)',
             background: '#ffffff',
-            padding: '8px 14px',
+            padding: '10px 18px',
             borderRadius: 'var(--radius-full)',
             display: 'flex',
-            gap: 12,
-            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)',
+            gap: 16,
+            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.18)',
             border: '1px solid var(--glass-border)',
-            zIndex: 999
+            zIndex: 10000
           }}
         >
           {emojis.map(emoji => (
@@ -107,11 +66,13 @@ export default function ControlBar({
               style={{
                 background: 'none',
                 border: 'none',
-                fontSize: '1.5rem',
+                fontSize: '1.8rem',
                 cursor: 'pointer',
                 transition: 'transform 0.15s ease',
-                padding: '4px'
+                padding: '4px 6px'
               }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.3)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
               onClick={(e) => handleSelectEmoji(e, emoji)}
             >
               {emoji}
@@ -120,137 +81,182 @@ export default function ControlBar({
         </div>
       )}
 
-      {/* Whiteboard Toggle */}
-      <button 
-        type="button"
-        className={`control-btn ${activePanel === 'whiteboard' ? 'active' : ''}`} 
-        onClick={() => onTogglePanel('whiteboard')}
-        title="Interactive Whiteboard & Slides"
-      >
-        <PenTool size={20} />
-      </button>
+      <div className="control-bar" style={{ position: 'relative' }}>
+        {/* Audio Toggle */}
+        <button 
+          type="button"
+          className={`control-btn ${micOn ? '' : 'off'}`} 
+          onClick={onToggleMic}
+          title={micOn ? 'Mute Microphone' : 'Unmute Microphone'}
+        >
+          {micOn ? <Mic size={20} /> : <MicOff size={20} />}
+        </button>
 
-      {/* In-Meeting Chat */}
-      <button 
-        type="button"
-        className={`control-btn ${activePanel === 'chat' ? 'active' : ''}`} 
-        onClick={() => onTogglePanel('chat')}
-        title="Chat & Messaging"
-        style={{ position: 'relative' }}
-      >
-        <MessageSquare size={20} />
-        {unreadChatCount > 0 && (
-          <span style={{
-            position: 'absolute',
-            top: -4,
-            right: -4,
-            background: '#ef4444',
-            color: 'white',
-            borderRadius: '50%',
-            width: 20,
-            height: 20,
-            fontSize: '0.7rem',
-            fontWeight: 800,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.5)',
-            border: '2px solid #ffffff'
-          }}>
-            {unreadChatCount > 9 ? '9+' : unreadChatCount}
-          </span>
-        )}
-      </button>
+        {/* Camera Toggle */}
+        <button 
+          type="button"
+          className={`control-btn ${camOn ? '' : 'off'}`} 
+          onClick={onToggleCam}
+          title={camOn ? 'Turn Off Camera' : 'Turn On Camera'}
+        >
+          {camOn ? <Video size={20} /> : <VideoOff size={20} />}
+        </button>
 
-      {/* Live Polls & Quizzes */}
-      <button 
-        type="button"
-        className={`control-btn ${activePanel === 'polls' ? 'active' : ''}`} 
-        onClick={() => onTogglePanel('polls')}
-        title="Live Polls & Quizzes"
-      >
-        <BarChart2 size={20} />
-      </button>
+        {/* Screen Share */}
+        <button 
+          type="button"
+          className={`control-btn ${screenOn ? 'active' : ''}`} 
+          onClick={onToggleScreen}
+          title="Share Screen"
+        >
+          <Monitor size={20} />
+        </button>
 
-      {/* Shared Notes Pad */}
-      <button 
-        type="button"
-        className={`control-btn ${activePanel === 'notes' ? 'active' : ''}`} 
-        onClick={() => onTogglePanel('notes')}
-        title="Collaborative Shared Notes"
-      >
-        <FileText size={20} />
-      </button>
+        {/* Jitsi Meet Live Reaction Emojis Toggle */}
+        <button 
+          type="button"
+          className={`control-btn ${showEmojiMenu ? 'active' : ''}`} 
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowEmojiMenu(!showEmojiMenu);
+          }}
+          title="Send Reaction Emoji"
+        >
+          <Smile size={20} />
+        </button>
 
-      {/* SIP / H.323 Virtual Dialer */}
-      <button 
-        type="button"
-        className={`control-btn ${activePanel === 'sip' ? 'active' : ''}`} 
-        onClick={() => onTogglePanel('sip')}
-        title="SIP / PSTN Phone Dialer Bridge"
-      >
-        <PhoneCall size={20} />
-      </button>
+        {/* Whiteboard Toggle */}
+        <button 
+          type="button"
+          className={`control-btn ${activePanel === 'whiteboard' ? 'active' : ''}`} 
+          onClick={() => onTogglePanel('whiteboard')}
+          title="Interactive Whiteboard & Slides"
+        >
+          <PenTool size={20} />
+        </button>
 
-      {/* Raise Hand */}
-      <button 
-        type="button"
-        className={`control-btn ${handRaised ? 'active' : ''}`} 
-        onClick={onToggleHand}
-        title="Raise / Lower Hand"
-      >
-        <Hand size={20} />
-      </button>
+        {/* In-Meeting Chat */}
+        <button 
+          type="button"
+          className={`control-btn ${activePanel === 'chat' ? 'active' : ''}`} 
+          onClick={() => onTogglePanel('chat')}
+          title="Chat & Messaging"
+          style={{ position: 'relative' }}
+        >
+          <MessageSquare size={20} />
+          {unreadChatCount > 0 && (
+            <span style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+              background: '#ef4444',
+              color: 'white',
+              borderRadius: '50%',
+              width: 20,
+              height: 20,
+              fontSize: '0.7rem',
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.5)',
+              border: '2px solid #ffffff'
+            }}>
+              {unreadChatCount > 9 ? '9+' : unreadChatCount}
+            </span>
+          )}
+        </button>
 
-      {/* Local Recording */}
-      <button 
-        type="button"
-        className={`control-btn ${isRecording ? 'off' : ''}`} 
-        onClick={onToggleRecording}
-        title={isRecording ? 'Stop Recording' : 'Start Local Recording'}
-      >
-        <Disc size={20} color={isRecording ? '#ef4444' : undefined} />
-      </button>
+        {/* Live Polls & Quizzes */}
+        <button 
+          type="button"
+          className={`control-btn ${activePanel === 'polls' ? 'active' : ''}`} 
+          onClick={() => onTogglePanel('polls')}
+          title="Live Polls & Quizzes"
+        >
+          <BarChart2 size={20} />
+        </button>
 
-      {/* Security E2EE & Lock */}
-      <button 
-        type="button"
-        className={`control-btn ${isE2EE ? 'active' : ''}`} 
-        onClick={onToggleE2EE}
-        title="End-to-End Encryption (E2EE)"
-      >
-        <Shield size={20} />
-      </button>
+        {/* Shared Notes Pad */}
+        <button 
+          type="button"
+          className={`control-btn ${activePanel === 'notes' ? 'active' : ''}`} 
+          onClick={() => onTogglePanel('notes')}
+          title="Collaborative Shared Notes"
+        >
+          <FileText size={20} />
+        </button>
 
-      <button 
-        type="button"
-        className={`control-btn ${isLocked ? 'active' : ''}`} 
-        onClick={onToggleLock}
-        title={isLocked ? 'Unlock Room' : 'Lock Room (Enable Lobby)'}
-      >
-        <Lock size={20} />
-      </button>
+        {/* SIP / H.323 Virtual Dialer */}
+        <button 
+          type="button"
+          className={`control-btn ${activePanel === 'sip' ? 'active' : ''}`} 
+          onClick={() => onTogglePanel('sip')}
+          title="SIP / PSTN Phone Dialer Bridge"
+        >
+          <PhoneCall size={20} />
+        </button>
 
-      {/* App Integration Modal Trigger */}
-      <button 
-        type="button"
-        className="control-btn" 
-        onClick={onOpenIntegrationModal}
-        title="Embed Code & API SDK"
-      >
-        <Code size={20} />
-      </button>
+        {/* Raise Hand */}
+        <button 
+          type="button"
+          className={`control-btn ${handRaised ? 'active' : ''}`} 
+          onClick={onToggleHand}
+          title="Raise / Lower Hand"
+        >
+          <Hand size={20} />
+        </button>
 
-      {/* Leave Meeting */}
-      <button 
-        type="button"
-        className="control-btn off" 
-        onClick={onLeaveMeeting}
-        style={{ marginLeft: 16 }}
-        title="Leave Meeting"
-      >
-        <PhoneOff size={20} />
-      </button>
-    </div>
+        {/* Local Recording */}
+        <button 
+          type="button"
+          className={`control-btn ${isRecording ? 'off' : ''}`} 
+          onClick={onToggleRecording}
+          title={isRecording ? 'Stop Recording' : 'Start Local Recording'}
+        >
+          <Disc size={20} color={isRecording ? '#ef4444' : undefined} />
+        </button>
+
+        {/* Security E2EE & Lock */}
+        <button 
+          type="button"
+          className={`control-btn ${isE2EE ? 'active' : ''}`} 
+          onClick={onToggleE2EE}
+          title="End-to-End Encryption (E2EE)"
+        >
+          <Shield size={20} />
+        </button>
+
+        <button 
+          type="button"
+          className={`control-btn ${isLocked ? 'active' : ''}`} 
+          onClick={onToggleLock}
+          title={isLocked ? 'Unlock Room' : 'Lock Room (Enable Lobby)'}
+        >
+          <Lock size={20} />
+        </button>
+
+        {/* App Integration Modal Trigger */}
+        <button 
+          type="button"
+          className="control-btn" 
+          onClick={onOpenIntegrationModal}
+          title="Embed Code & API SDK"
+        >
+          <Code size={20} />
+        </button>
+
+        {/* Leave Meeting */}
+        <button 
+          type="button"
+          className="control-btn off" 
+          onClick={onLeaveMeeting}
+          style={{ marginLeft: 16 }}
+          title="Leave Meeting"
+        >
+          <PhoneOff size={20} />
+        </button>
+      </div>
+    </>
   );
 }
