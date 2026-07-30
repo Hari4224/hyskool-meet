@@ -398,25 +398,33 @@ body {
   z-index: 2;
 }
 
-/* Apple Floating Floating Controls Bar */
+/* Controls Toolbar (Responsive Mobile & Desktop) */
 .control-bar {
-  height: 84px;
-  background: rgba(255, 255, 255, 0.92);
+  height: 76px;
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--glass-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 0 28px;
+  gap: 12px;
+  padding: 0 16px;
   z-index: 10;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04);
+  max-width: 100vw;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+}
+
+.control-bar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
 }
 
 .control-btn {
-  width: 50px;
-  height: 50px;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
   border-radius: 50%;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
@@ -425,8 +433,54 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  flex-shrink: 0;
+}
+
+/* Mobile Responsiveness Rules (< 768px) */
+@media (max-width: 768px) {
+  .meeting-header {
+    height: 52px;
+    padding: 0 12px;
+  }
+
+  .gmeet-video-section {
+    padding: 10px;
+  }
+
+  .gmeet-grid.count-1 {
+    max-height: 75vh;
+  }
+
+  .gmeet-grid.count-2 {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    max-height: 75vh;
+  }
+
+  .gmeet-tile {
+    min-height: 140px;
+  }
+
+  .avatar-placeholder-gmeet {
+    width: 70px;
+    height: 70px;
+    font-size: 1.6rem;
+  }
+
+  .control-bar {
+    height: 70px;
+    justify-content: flex-start;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .control-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+  }
 }
 
 .control-btn:hover {
