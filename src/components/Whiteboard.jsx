@@ -49,7 +49,7 @@ export default function Whiteboard({ socket, roomId, initialElements = [] }) {
 
       if (el.tool === 'pen' || el.tool === 'eraser') {
         if (el.tool === 'eraser') {
-          ctx.strokeStyle = '#020617';
+          ctx.strokeStyle = '#ffffff';
         }
         ctx.beginPath();
         el.points.forEach((pt, idx) => {
@@ -253,7 +253,7 @@ export default function Whiteboard({ socket, roomId, initialElements = [] }) {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        style={{ cursor: tool === 'eraser' ? 'cell' : 'crosshair', background: '#020617', width: '100%', height: '100%', touchAction: 'none' }}
+        style={{ cursor: tool === 'eraser' ? 'cell' : 'crosshair', background: '#ffffff', width: '100%', height: '100%', touchAction: 'none' }}
       />
     </div>
   );
