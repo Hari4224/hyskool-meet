@@ -17,6 +17,7 @@ function RemoteParticipantTile({ participant, stream }) {
         audioEl.srcObject = stream;
       }
       audioEl.volume = 1.0;
+      audioEl.muted = false;
       audioEl.play().catch(err => console.warn('Remote audio playback notice:', err));
     }
   };
@@ -28,6 +29,7 @@ function RemoteParticipantTile({ participant, stream }) {
           ref={videoCallbackRef} 
           autoPlay 
           playsInline 
+          muted={true}
           className="gmeet-video"
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
@@ -42,6 +44,7 @@ function RemoteParticipantTile({ participant, stream }) {
         <audio 
           ref={audioCallbackRef}
           autoPlay 
+          controls={false}
         />
       )}
 
