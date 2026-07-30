@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import VideoGrid from './VideoGrid';
 import ControlBar from './ControlBar';
 import Whiteboard from './Whiteboard';
@@ -8,7 +8,35 @@ import SIPDialerModal from './SIPDialerModal';
 import SharedNotes from './SharedNotes';
 import IntegrationModal from './IntegrationModal';
 
-import { Shield, Lock, Wifi, WifiOff, Users, Radio, AlertCircle, Sparkles } from 'lucide-react';
+import { Shield, Lock, Users, Radio, Sparkles, Volume2, AlertTriangle } from 'lucide-react';
+
+// Enterprise-Grade ICE Servers (STUN & TURN Relays for NAT/Firewall Traversal)
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ],
+  iceCandidatePoolSize: 10
+};
 
 export default function MeetingRoom({ 
   socket, 
@@ -23,25 +51,30 @@ export default function MeetingRoom({
   const [isRecording, setIsRecording] = useState(false);
   const [isE2EE, setIsE2EE] = useState(roomData?.enableE2EE ?? true);
   const [isLocked, setIsLocked] = useState(false);
-  const [activePanel, setActivePanel] = useState(null); // 'whiteboard', 'chat', 'polls', 'notes', 'sip', null
-
-  const [videoQuality, setVideoQuality] = useState('1080p'); // '1080p', '720p', '480p'
+  const [activePanel, setActivePanel] = useState(null);
+  const [videoQuality, setVideoQuality] = useState('1080p');
+  const [audioBlocked, setAudioBlocked] = useState(false);
 
   const [localStream, setLocalStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [remoteStreams, setRemoteStreams] = useState(new Map()); // Map<socketId, MediaStream>
+
   const [whiteboardElements, setWhiteboardElements] = useState([]);
   const [sharedNotes, setSharedNotes] = useState('');
   const [polls, setPolls] = useState([]);
 
-  // Initialize WebRTC High Definition (HD/1080p) Local Media Stream
+  // PeerConnections Ref: Map<socketId, RTCPeerConnection>
+  const peerConnections = useRef(new Map());
+  // ICE Candidate Queues: Map<socketId, RTCIceCandidate[]>
+  const iceCandidatesQueue = useRef(new Map());
+
+  // 1. Initialize Local HD Media Stream (Mic & Camera)
   useEffect(() => {
+    let currentStream = null;
+
     async function initMedia() {
       try {
-        if (localStream) {
-          localStream.getTracks().forEach(t => t.stop());
-        }
-
         const widthConstraint = videoQuality === '1080p' ? { ideal: 1920, min: 1280 } : videoQuality === '720p' ? { ideal: 1280, min: 960 } : { ideal: 640 };
         const heightConstraint = videoQuality === '1080p' ? { ideal: 1080, min: 720 } : videoQuality === '720p' ? { ideal: 720, min: 540 } : { ideal: 480 };
 
@@ -58,14 +91,30 @@ export default function MeetingRoom({
             autoGainControl: true
           }
         });
+
+        currentStream = stream;
         setLocalStream(stream);
+
+        // Update local tracks on existing peer connections
+        peerConnections.current.forEach((pc) => {
+          const senders = pc.getSenders();
+          stream.getTracks().forEach((track) => {
+            const sender = senders.find(s => s.track && s.track.kind === track.kind);
+            if (sender) {
+              sender.replaceTrack(track);
+            } else {
+              pc.addTrack(track, stream);
+            }
+          });
+        });
       } catch (err) {
-        console.warn('HD video permission fallback to standard mode:', err);
+        console.warn('HD camera fallback to standard constraints:', err);
         try {
           const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          currentStream = fallbackStream;
           setLocalStream(fallbackStream);
         } catch (e) {
-          console.warn('Media devices unavailable:', e);
+          console.error('Media devices access error:', e);
         }
       }
     }
@@ -73,39 +122,186 @@ export default function MeetingRoom({
     initMedia();
 
     return () => {
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
       }
     };
   }, [videoQuality]);
 
-  // Socket.IO Room Connection
+  // 2. WebRTC PeerConnection Lifecycle & Socket Signaling Engine
   useEffect(() => {
     if (!socket) return;
 
+    // Join Socket Room
     socket.emit('join-room', {
       roomId: roomData.roomId,
       userName: roomData.userName,
       userRole: roomData.userRole
     });
 
+    // Helper: Create RTCPeerConnection for a target peer
+    const createPeerConnection = (targetId, isInitiator) => {
+      if (peerConnections.current.has(targetId)) {
+        return peerConnections.current.get(targetId);
+      }
+
+      console.log(`[WebRTC Engine] Creating RTCPeerConnection for target: ${targetId} (Initiator: ${isInitiator})`);
+      const pc = new RTCPeerConnection(ICE_SERVERS);
+      peerConnections.current.set(targetId, pc);
+
+      // Add local media tracks to PeerConnection
+      if (localStream) {
+        localStream.getTracks().forEach((track) => {
+          pc.addTrack(track, localStream);
+        });
+      }
+
+      // Handle ICE Candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('signal', {
+            targetId,
+            signal: { type: 'candidate', candidate: event.candidate }
+          });
+        }
+      };
+
+      // Handle Connection State Changes (Auto-reconnect on failure)
+      pc.onconnectionstatechange = () => {
+        console.log(`[WebRTC Connection State] ${targetId}: ${pc.connectionState}`);
+        if (pc.connectionState === 'failed') {
+          pc.restartIce();
+        }
+      };
+
+      // Handle Remote Audio/Video Tracks
+      pc.ontrack = (event) => {
+        console.log(`[WebRTC Track Received] From ${targetId}:`, event.streams[0]);
+        const remoteStream = event.streams[0] || new MediaStream([event.track]);
+        
+        setRemoteStreams(prev => {
+          const updated = new Map(prev);
+          updated.set(targetId, remoteStream);
+          return updated;
+        });
+
+        // Test browser autoplay policy
+        const audioTest = new Audio();
+        audioTest.srcObject = remoteStream;
+        audioTest.play().catch(() => setAudioBlocked(true));
+      };
+
+      // If Initiator: Create Offer
+      if (isInitiator) {
+        pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
+          .then((offer) => pc.setLocalDescription(offer))
+          .then(() => {
+            socket.emit('signal', {
+              targetId,
+              signal: { type: 'offer', sdp: pc.localDescription }
+            });
+          })
+          .catch((err) => console.error('[WebRTC Offer Error]:', err));
+      }
+
+      return pc;
+    };
+
+    // Socket Event: Room Joined
     socket.on('room-joined', (data) => {
-      setParticipants(data.participants.filter(p => p.id !== socket.id));
+      const existingPeers = data.participants.filter(p => p.id !== socket.id);
+      setParticipants(existingPeers);
       if (data.whiteboardElements) setWhiteboardElements(data.whiteboardElements);
       if (data.sharedNotes) setSharedNotes(data.sharedNotes);
       if (data.polls) setPolls(data.polls);
       setIsLocked(!!data.isLocked);
       setIsE2EE(!!data.isE2EE);
+
+      // Create Peer Connections as initiator for existing peers in room
+      existingPeers.forEach((peer) => {
+        createPeerConnection(peer.id, true);
+      });
     });
 
+    // Socket Event: User Connected
     socket.on('user-connected', ({ user, participants: allParticipants }) => {
       setParticipants(allParticipants.filter(p => p.id !== socket.id));
+      createPeerConnection(user.id, false);
     });
 
+    // Socket Event: User Disconnected
     socket.on('user-disconnected', ({ userId, participants: allParticipants }) => {
       setParticipants(allParticipants.filter(p => p.id !== socket.id));
+      
+      if (peerConnections.current.has(userId)) {
+        peerConnections.current.get(userId).close();
+        peerConnections.current.delete(userId);
+      }
+      
+      setRemoteStreams(prev => {
+        const updated = new Map(prev);
+        updated.delete(userId);
+        return updated;
+      });
     });
 
+    // Socket Event: WebRTC Signaling Relay (Offer / Answer / Candidate)
+    socket.on('signal', async ({ senderId, signal }) => {
+      let pc = peerConnections.current.get(senderId);
+      if (!pc) {
+        pc = createPeerConnection(senderId, false);
+      }
+
+      try {
+        if (signal.type === 'offer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          
+          // Process queued ICE candidates
+          if (iceCandidatesQueue.current.has(senderId)) {
+            const queue = iceCandidatesQueue.current.get(senderId);
+            for (const cand of queue) {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            }
+            iceCandidatesQueue.current.delete(senderId);
+          }
+
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+
+          socket.emit('signal', {
+            targetId: senderId,
+            signal: { type: 'answer', sdp: pc.localDescription }
+          });
+
+        } else if (signal.type === 'answer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+
+          // Process queued ICE candidates
+          if (iceCandidatesQueue.current.has(senderId)) {
+            const queue = iceCandidatesQueue.current.get(senderId);
+            for (const cand of queue) {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            }
+            iceCandidatesQueue.current.delete(senderId);
+          }
+
+        } else if (signal.type === 'candidate' && signal.candidate) {
+          if (pc.remoteDescription && pc.remoteDescription.type) {
+            await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          } else {
+            // Queue candidate until remote description is set
+            if (!iceCandidatesQueue.current.has(senderId)) {
+              iceCandidatesQueue.current.set(senderId, []);
+            }
+            iceCandidatesQueue.current.get(senderId).push(signal.candidate);
+          }
+        }
+      } catch (err) {
+        console.error('[WebRTC Signal Process Error]:', err);
+      }
+    });
+
+    // Auxiliary Real-Time Socket Events
     socket.on('media-state-changed', ({ participants: updatedParticipants }) => {
       setParticipants(updatedParticipants.filter(p => p.id !== socket.id));
     });
@@ -130,13 +326,18 @@ export default function MeetingRoom({
       socket.off('room-joined');
       socket.off('user-connected');
       socket.off('user-disconnected');
+      socket.off('signal');
       socket.off('media-state-changed');
       socket.off('poll-created');
       socket.off('poll-updated');
       socket.off('room-lock-changed');
       socket.off('e2ee-changed');
+
+      // Close all peer connections on unmount
+      peerConnections.current.forEach(pc => pc.close());
+      peerConnections.current.clear();
     };
-  }, [socket, roomData]);
+  }, [socket, roomData, localStream]);
 
   // Mic Toggle
   const handleToggleMic = () => {
@@ -185,12 +386,18 @@ export default function MeetingRoom({
     }
   };
 
-  // Panel Toggle
+  // Unmute Autoplay Unlocker
+  const handleUnlockAudio = () => {
+    setAudioBlocked(false);
+    document.querySelectorAll('audio, video').forEach(media => {
+      media.play().catch(() => {});
+    });
+  };
+
   const handleTogglePanel = (panelName) => {
     setActivePanel(prev => prev === panelName ? null : panelName);
   };
 
-  // Hand Raise Toggle
   const handleToggleHand = () => {
     const nextState = !handRaised;
     setHandRaised(nextState);
@@ -199,19 +406,16 @@ export default function MeetingRoom({
     }
   };
 
-  // Local Recording Toggle
   const handleToggleRecording = () => {
     setIsRecording(!isRecording);
   };
 
-  // E2EE Toggle
   const handleToggleE2EE = () => {
     const nextState = !isE2EE;
     setIsE2EE(nextState);
     if (socket) socket.emit('toggle-e2ee', nextState);
   };
 
-  // Lock Toggle
   const handleToggleLock = () => {
     const nextState = !isLocked;
     setIsLocked(nextState);
@@ -220,6 +424,29 @@ export default function MeetingRoom({
 
   return (
     <div className="meeting-workspace">
+      {/* Autoplay Audio Unlock Warning Banner */}
+      {audioBlocked && (
+        <div 
+          onClick={handleUnlockAudio}
+          style={{
+            background: 'linear-gradient(90deg, #ea4335, #fbbc04)',
+            color: 'white',
+            padding: '8px 16px',
+            fontSize: '0.85rem',
+            fontWeight: 700,
+            textAlign: 'center',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            zIndex: 100
+          }}
+        >
+          <Volume2 size={16} /> Click here to enable remote participant audio playback in your browser!
+        </div>
+      )}
+
       {/* Top Header Status Bar */}
       <header className="meeting-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -246,7 +473,7 @@ export default function MeetingRoom({
 
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
             <Users size={14} style={{ display: 'inline', marginRight: 4 }} />
-            {participants.length + 1} Participants
+            {participants.length + 1} Connected
           </span>
           {isRecording && (
             <span className="badge badge-rose" style={{ background: 'rgba(234,67,53,0.2)', color: '#ea4335', border: '1px solid rgba(234,67,53,0.4)' }}>
@@ -256,9 +483,9 @@ export default function MeetingRoom({
         </div>
       </header>
 
-      {/* Main Meeting Body (GMeet Adaptive Full Stage) */}
+      {/* Main Meeting Body (GMeet Adaptive Stage) */}
       <div className="meeting-body">
-        {/* Video Grid Stage */}
+        {/* Real-time Video Grid Stage */}
         <VideoGrid 
           localStream={localStream}
           localUser={{
@@ -268,6 +495,7 @@ export default function MeetingRoom({
             handRaised
           }}
           participants={participants}
+          remoteStreams={remoteStreams}
           screenStream={screenStream}
           isRecording={isRecording}
           isE2EE={isE2EE}

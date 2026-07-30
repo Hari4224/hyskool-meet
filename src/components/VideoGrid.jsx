@@ -1,10 +1,59 @@
 import React, { useEffect, useRef } from 'react';
-import { Mic, MicOff, Shield, Hand, Sparkles, Pin } from 'lucide-react';
+import { Mic, MicOff, Shield, Hand, Sparkles } from 'lucide-react';
+
+function RemoteParticipantTile({ participant, stream }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(err => console.warn('Remote video playback error:', err));
+    }
+  }, [stream]);
+
+  return (
+    <div className={`gmeet-tile ${!participant.audioMuted ? 'speaking' : ''}`}>
+      {stream && !participant.videoMuted ? (
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          className="gmeet-video"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <div className="avatar-placeholder-gmeet">
+          {participant.name ? participant.name.substring(0, 2).toUpperCase() : 'U'}
+        </div>
+      )}
+
+      {/* Hidden audio element guarantee for remote audio */}
+      {stream && (
+        <audio 
+          ref={(audioEl) => {
+            if (audioEl && stream) {
+              audioEl.srcObject = stream;
+              audioEl.play().catch(() => {});
+            }
+          }}
+          autoPlay 
+        />
+      )}
+
+      <div className="gmeet-name-pill">
+        {participant.audioMuted ? <MicOff size={14} color="#ea4335" /> : <Mic size={14} color="#34d399" />}
+        <span>{participant.name}</span>
+        {participant.handRaised && <Hand size={14} color="#fbbc04" />}
+      </div>
+    </div>
+  );
+}
 
 export default function VideoGrid({ 
   localStream, 
   localUser, 
   participants = [], 
+  remoteStreams = new Map(),
   screenStream, 
   isRecording, 
   isE2EE,
@@ -58,15 +107,11 @@ export default function VideoGrid({
             </div>
 
             {participants.map(p => (
-              <div key={p.id} className="gmeet-tile" style={{ minHeight: '160px' }}>
-                <div className="avatar-placeholder-gmeet" style={{ width: 60, height: 60, fontSize: '1.2rem' }}>
-                  {p.name ? p.name.substring(0, 2).toUpperCase() : 'U'}
-                </div>
-                <div className="gmeet-name-pill">
-                  {p.audioMuted ? <MicOff size={14} color="#ea4335" /> : <Mic size={14} color="#34d399" />}
-                  <span>{p.name}</span>
-                </div>
-              </div>
+              <RemoteParticipantTile 
+                key={p.id} 
+                participant={p} 
+                stream={remoteStreams.get(p.id)} 
+              />
             ))}
           </div>
         </div>
@@ -93,20 +138,11 @@ export default function VideoGrid({
 
           {/* Remote Participants */}
           {participants.map((participant) => (
-            <div 
+            <RemoteParticipantTile 
               key={participant.id} 
-              className={`gmeet-tile ${!participant.audioMuted ? 'speaking' : ''}`}
-            >
-              <div className="avatar-placeholder-gmeet">
-                {participant.name ? participant.name.substring(0, 2).toUpperCase() : 'U'}
-              </div>
-
-              <div className="gmeet-name-pill">
-                {participant.audioMuted ? <MicOff size={14} color="#ea4335" /> : <Mic size={14} color="#34d399" />}
-                <span>{participant.name}</span>
-                {participant.handRaised && <Hand size={14} color="#fbbc04" />}
-              </div>
-            </div>
+              participant={participant} 
+              stream={remoteStreams.get(participant.id)} 
+            />
           ))}
         </div>
       )}
